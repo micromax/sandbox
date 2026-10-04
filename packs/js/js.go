@@ -27,7 +27,7 @@ const (
 func Pack() *sandbox.Pack {
 	return &sandbox.Pack{
 		Name:    "js",
-		Aliases: []string{"javascript", "node"},
+		Aliases: []string{"javascript", "quickjs"},
 		Version: Version,
 		Wasm: &sandbox.WasmSpec{
 			Module: sandbox.Artifact{
