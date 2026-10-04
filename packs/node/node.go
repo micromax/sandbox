@@ -7,7 +7,7 @@ const (
 	// Version is the Node.js version used.
 	Version = "22"
 	// Image is the pinned Node.js container image digest.
-	Image = "node@sha256:d541571217e1329c323f46f5647a98eb107e0c4b2d56d946571fa08de7b09594"
+	Image = "node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402"
 )
 
 // Pack returns the Node.js pack configured for the Docker backend.

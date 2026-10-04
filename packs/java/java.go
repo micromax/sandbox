@@ -7,7 +7,7 @@ const (
 	// Version is the Java JDK LTS version used.
 	Version = "21"
 	// Image is the pinned Eclipse Temurin OpenJDK container image digest.
-	Image = "eclipse-temurin@sha256:69b0fa630eb9df28e3b3c3b0eb6190538fc1008d5162a046c8e39f706fa8251e"
+	Image = "eclipse-temurin@sha256:f765c6e3c2d67aad0a588ebe7e932a23eaec37e8485097979c3d497a796e60fb"
 )
 
 // Pack returns the Java language pack configured for the Docker backend.
