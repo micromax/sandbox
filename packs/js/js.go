@@ -13,6 +13,9 @@ import (
 //go:embed qjs-wasi.wasm
 var qjsWasm []byte
 
+//go:embed driver.js
+var jsDriver string
+
 const (
 	// Version is the pinned QuickJS-NG release version.
 	Version = "0.17.0"
@@ -33,7 +36,8 @@ func Pack() *sandbox.Pack {
 				Embedded: qjsWasm,
 				Size:     int64(len(qjsWasm)),
 			},
-			Args: []string{"qjs", "--std"},
+			Args:          []string{"qjs", "--std"},
+			SessionDriver: jsDriver,
 		},
 		Caps: sandbox.Capabilities{
 			Sessions:     true,

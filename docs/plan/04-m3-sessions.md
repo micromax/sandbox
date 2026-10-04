@@ -87,11 +87,11 @@ m.Shutdown(ctx)
 
 ## Exit criteria
 
-- [ ] REPL semantics work for Python and JS
-- [ ] A killed session can never be silently reused
-- [ ] Manager caps, idle reaping and shutdown behave as specified
-- [ ] No goroutine or memory leaks after 1,000 create/close cycles
-- [ ] The sentinel framing cannot be spoofed by guest code
+- [x] REPL semantics work for Python and JS
+- [x] A killed session can never be silently reused
+- [x] Manager caps, idle reaping and shutdown behave as specified
+- [x] No goroutine or memory leaks after 1,000 create/close cycles
+- [x] The sentinel framing cannot be spoofed by guest code
 
 ## Risks
 

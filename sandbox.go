@@ -293,3 +293,47 @@ func (s *Sandbox) Run(ctx context.Context, spec Spec) (*Result, error) {
 		return nil, runErr
 	}
 }
+
+// NewSession starts a stateful interactive REPL session for the given language.
+func (s *Sandbox) NewSession(ctx context.Context, lang string, opts ...SessionOpt) (Session, error) {
+	pack, err := s.lookup(lang)
+	if err != nil {
+		return nil, err
+	}
+	if !pack.Caps.Sessions {
+		return nil, fmt.Errorf("%w: language %q does not support sessions", ErrUnsupported, pack.Name)
+	}
+
+	backend, err := s.route(pack)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionBackend, ok := backend.(SessionBackend)
+	if !ok {
+		return nil, fmt.Errorf("%w: backend %q does not support sessions", ErrUnsupported, backend.Name())
+	}
+
+	cfg := SessionConfig{
+		ID:          generateSessionID(),
+		Limits:      s.defaults,
+		IdleTimeout: 5 * time.Minute,
+		MaxLifetime: 1 * time.Hour,
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	resolvedLim, err := resolveLimits(s.defaults, &cfg.Limits)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Limits = resolvedLim
+
+	req := &SessionRequest{
+		Pack:   pack,
+		Config: cfg,
+	}
+	return sessionBackend.NewSession(ctx, req)
+}
+

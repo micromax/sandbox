@@ -69,6 +69,8 @@ type Result struct {
 	Usage Usage
 	// Backend is the name of the backend that ran the code.
 	Backend string
+	// Restarted reports whether the session was restarted prior to this eval.
+	Restarted bool
 }
 
 // Usage reports resources consumed by one execution.

@@ -5,8 +5,13 @@
 package python
 
 import (
+	_ "embed"
+
 	"github.com/micromax/sandbox"
 )
+
+//go:embed driver.py
+var pythonDriver string
 
 const (
 	// Version is the pinned CPython release version.
@@ -48,6 +53,7 @@ func Pack() *sandbox.Pack {
 					GuestPath: "lib",
 				},
 			},
+			SessionDriver: pythonDriver,
 		},
 		Caps: sandbox.Capabilities{
 			Sessions:     true,
