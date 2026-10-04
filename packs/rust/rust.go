@@ -7,7 +7,7 @@ const (
 	// Version is the Rust toolchain version used.
 	Version = "1.85"
 	// Image is the pinned Rust container image digest.
-	Image = "rust:trixie@sha256:5d05167b28cef0fa3a6c781cd77949386848191f3382e82cf53bd1277a47a98f"
+	Image = "rust:alpine@sha256:a96ea6d18d4062e38f16cfbadd8b4541d622f2527dd0a5eca1fb36d301da4e88"
 )
 
 // Pack returns the Rust pack configured for the Docker backend.

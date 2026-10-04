@@ -92,6 +92,7 @@ func main() {
 		Lang: lang,
 		Code: code,
 		Limits: &sandbox.Limits{
+			Memory:   512 << 20,        // 512MB to comfortably allow toolchain compilation (go, rust, java)
 			WallTime: 60 * time.Second, // Allow enough time for initial image pulls if needed
 		},
 	})

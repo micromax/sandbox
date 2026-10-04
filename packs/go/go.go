@@ -7,7 +7,7 @@ const (
 	// Version is the Go toolchain version used.
 	Version = "1.24"
 	// Image is the pinned Golang alpine container image digest.
-	Image = "golang@sha256:2d40d4fc278dad38be0777d5e2e88a2c6eb511089201524e9305ec0b37060372"
+	Image = "golang:1.24-alpine@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191"
 )
 
 // Pack returns the Go pack configured for the Docker backend.

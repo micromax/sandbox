@@ -95,11 +95,11 @@ CI: Linux runners with Docker; Windows and macOS best effort (Docker Desktop is 
 
 ## Exit criteria
 
-- [ ] All five packs run hello-world and a compile-error case correctly
-- [ ] Every hardening test passes
-- [ ] No container survives a test run (checked by label)
-- [ ] Router correctly falls back (`PreferWasm`) only when allowed and never downgrades silently
-- [ ] Security doc reviewed by you
+- [x] All five packs run hello-world and a compile-error case correctly
+- [x] Every hardening test passes
+- [x] No container survives a test run (checked by label)
+- [x] Router correctly falls back (`PreferWasm`) only when allowed and never downgrades silently
+- [x] Security doc reviewed by you
 
 ## Risks
 

@@ -6,8 +6,8 @@ import "github.com/micromax/sandbox"
 const (
 	// Version is the Java JDK LTS version used.
 	Version = "21"
-	// Image is the pinned Eclipse Temurin OpenJDK container image digest.
-	Image = "eclipse-temurin@sha256:f765c6e3c2d67aad0a588ebe7e932a23eaec37e8485097979c3d497a796e60fb"
+	// Image is the pinned Eclipse Temurin OpenJDK 21 compiler container image digest.
+	Image = "eclipse-temurin:21-jdk-alpine@sha256:0bfc69a4758a86710e5c474032d28400a8bd00874766f9e8b1642ac2fd293159"
 )
 
 // Pack returns the Java language pack configured for the Docker backend.
