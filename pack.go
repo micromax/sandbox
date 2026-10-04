@@ -54,6 +54,8 @@ type Artifact struct {
 	Size int64
 	// Embedded holds the bytes when the artifact ships inside the binary.
 	Embedded []byte
+	// ArchiveEntry extracts a specific file from a zip archive when set.
+	ArchiveEntry string
 }
 
 // Mount makes an artifact available inside the guest, read-only.

@@ -260,9 +260,10 @@ func (s *Sandbox) Run(ctx context.Context, spec Spec) (*Result, error) {
 	outcome, runErr := backend.Run(runCtx, req)
 	wall := time.Since(start)
 
-	// If our deadline (not the caller's context) expired, report a timeout
-	// regardless of how the backend surfaced the interruption.
-	if runErr != nil && !isLimitError(runErr) &&
+	// If output limit was exceeded, prioritize ErrOutputLimit
+	if group.Truncated() {
+		runErr = ErrOutputLimit
+	} else if runErr != nil && !isLimitError(runErr) &&
 		runCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
 		runErr = fmt.Errorf("%w (%w): backend reported: %v", ErrTimeout, context.DeadlineExceeded, runErr)
 	}

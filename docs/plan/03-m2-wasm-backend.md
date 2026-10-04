@@ -81,12 +81,12 @@ All run on Windows, Linux and macOS in CI.
 
 ## Exit criteria
 
-- [ ] JS and Python run via `sb.Run` and return correct results
-- [ ] Every hostile-guest test above passes on all three OSes
-- [ ] Warm start under ~50 ms for JS and under ~300 ms for Python (measured, recorded)
-- [ ] Artifact download verifies SHA-256 and rejects a tampered file (tested)
-- [ ] No host file or env leak (tested)
-- [ ] Docs list exactly what each language can and cannot do
+- [x] JS and Python run via `sb.Run` and return correct results
+- [x] Every hostile-guest test above passes on all three OSes
+- [x] Warm start under ~50 ms for JS and under ~300 ms for Python (measured, recorded)
+- [x] Artifact download verifies SHA-256 and rejects a tampered file (tested)
+- [x] No host file or env leak (tested)
+- [x] Docs list exactly what each language can and cannot do
 
 ## Risks
 
