@@ -1,0 +1,18 @@
+# Binaries and build output
+*.exe
+*.test
+*.out
+/dist/
+/bin/
+
+# Go tooling
+coverage.txt
+*.prof
+
+# Editor / agent state
+.zcode/
+.vscode/
+.idea/
+
+# Local runtime cache
+/.cache/
