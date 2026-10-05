@@ -142,6 +142,12 @@ func (c *Client) ImagePull(ctx context.Context, image string) error {
 	return nil
 }
 
+// PortBinding holds the host IP and port mapping.
+type PortBinding struct {
+	HostIP   string `json:"HostIp"`
+	HostPort string `json:"HostPort"`
+}
+
 // ContainerCreateRequest holds configuration for container creation.
 type ContainerCreateRequest struct {
 	Image      string
@@ -161,32 +167,38 @@ type ContainerCreateRequest struct {
 	PidsLimit      int64
 	Tmpfs          map[string]string
 	Runtime        string
+
+	// Port publishing
+	ExposedPorts map[string]struct{}
+	PortBindings map[string][]PortBinding
 }
 
 // ContainerCreate spawns a new container configured with our security profile.
 func (c *Client) ContainerCreate(ctx context.Context, name string, cfg ContainerCreateRequest) (string, error) {
 	type hostConfig struct {
-		NetworkMode    string            `json:"NetworkMode"`
-		ReadonlyRootfs bool              `json:"ReadonlyRootfs"`
-		CapDrop        []string          `json:"CapDrop"`
-		SecurityOpt    []string          `json:"SecurityOpt"`
-		Memory         int64             `json:"Memory"`
-		MemorySwap     int64             `json:"MemorySwap"`
-		NanoCPUs       int64             `json:"NanoCPUs,omitempty"`
-		PidsLimit      *int64            `json:"PidsLimit,omitempty"`
-		Tmpfs          map[string]string `json:"Tmpfs,omitempty"`
-		Runtime        string            `json:"Runtime,omitempty"`
-		AutoRemove     bool              `json:"AutoRemove"`
+		NetworkMode    string                   `json:"NetworkMode"`
+		ReadonlyRootfs bool                     `json:"ReadonlyRootfs"`
+		CapDrop        []string                 `json:"CapDrop"`
+		SecurityOpt    []string                 `json:"SecurityOpt"`
+		Memory         int64                    `json:"Memory"`
+		MemorySwap     int64                    `json:"MemorySwap"`
+		NanoCPUs       int64                    `json:"NanoCPUs,omitempty"`
+		PidsLimit      *int64                   `json:"PidsLimit,omitempty"`
+		Tmpfs          map[string]string        `json:"Tmpfs,omitempty"`
+		Runtime        string                   `json:"Runtime,omitempty"`
+		AutoRemove     bool                     `json:"AutoRemove"`
+		PortBindings   map[string][]PortBinding `json:"PortBindings,omitempty"`
 	}
 
 	type createBody struct {
-		Image           string            `json:"Image"`
-		Cmd             []string          `json:"Cmd"`
-		WorkingDir      string            `json:"WorkingDir"`
-		Env             []string          `json:"Env,omitempty"`
-		Labels          map[string]string `json:"Labels,omitempty"`
-		NetworkDisabled bool              `json:"NetworkDisabled"`
-		HostConfig      hostConfig        `json:"HostConfig"`
+		Image           string              `json:"Image"`
+		Cmd             []string            `json:"Cmd"`
+		WorkingDir      string              `json:"WorkingDir"`
+		Env             []string            `json:"Env,omitempty"`
+		Labels          map[string]string   `json:"Labels,omitempty"`
+		NetworkDisabled bool                `json:"NetworkDisabled"`
+		HostConfig      hostConfig          `json:"HostConfig"`
+		ExposedPorts    map[string]struct{} `json:"ExposedPorts,omitempty"`
 	}
 
 	hc := hostConfig{
@@ -200,6 +212,7 @@ func (c *Client) ContainerCreate(ctx context.Context, name string, cfg Container
 		Tmpfs:          cfg.Tmpfs,
 		Runtime:        cfg.Runtime,
 		AutoRemove:     false,
+		PortBindings:   cfg.PortBindings,
 	}
 	if cfg.PidsLimit > 0 {
 		hc.PidsLimit = &cfg.PidsLimit
@@ -213,6 +226,7 @@ func (c *Client) ContainerCreate(ctx context.Context, name string, cfg Container
 		Labels:          cfg.Labels,
 		NetworkDisabled: cfg.NetworkMode == "none",
 		HostConfig:      hc,
+		ExposedPorts:    cfg.ExposedPorts,
 	}
 
 	payload, err := json.Marshal(body)
@@ -378,6 +392,9 @@ type ContainerInspectInfo struct {
 		ExitCode   int
 		FinishedAt string
 	}
+	NetworkSettings struct {
+		Ports map[string][]PortBinding `json:"Ports"`
+	} `json:"NetworkSettings"`
 }
 
 // ContainerInspect retrieves container state.
