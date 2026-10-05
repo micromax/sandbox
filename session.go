@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/micromax/sandbox/vfs"
 )
 
 var (
@@ -126,6 +128,7 @@ func WithSessionEnv(env map[string]string) SessionOpt {
 type SessionRequest struct {
 	Pack   *Pack
 	Config SessionConfig
+	FS     *vfs.FS
 }
 
 // SessionBackend is an optional interface implemented by backends capable of running stateful sessions.

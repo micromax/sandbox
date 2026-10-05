@@ -155,6 +155,7 @@ func (b *Backend) Serve(ctx context.Context, req *sandbox.ServeRequest) (sandbox
 	// 1. Create long-lived session instance
 	sessReq := &sandbox.SessionRequest{
 		Pack: req.Pack,
+		FS:   req.FS,
 		Config: sandbox.SessionConfig{
 			ID:          fmt.Sprintf("serve-%s-%x", req.Pack.Name, time.Now().UnixNano()),
 			Limits:      req.Limits,

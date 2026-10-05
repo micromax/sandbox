@@ -123,6 +123,20 @@ func (s *wasmSession) startLocked(ctx context.Context) error {
 		return err
 	}
 
+	// Copy injected files into inDir if provided
+	if s.req.FS != nil {
+		inFiles := s.req.FS.Snapshot("in")
+		for relPath, content := range inFiles {
+			target := filepath.Join(inDir, filepath.FromSlash(relPath))
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(target, content, 0o644); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Write driver script
 	wasmSpec := s.req.Pack.Wasm
 	var driverFileName string
