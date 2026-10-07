@@ -110,20 +110,46 @@ sandbox run --timeout 5s --mem 64M script.py
 # Start an interactive REPL
 sandbox repl --lang python
 
+# Start Model Context Protocol server for Claude / Cursor
+sandbox mcp
+
 # Serve a guest web server
 sandbox serve --lang js --port 8080 app.js
 ```
 
 ---
 
+## AI Agent Integration (Claude Desktop & Cursor)
+
+`sandbox` implements the standard [Model Context Protocol (MCP)](https://modelcontextprotocol.io), allowing LLMs to securely execute code on your machine:
+
+Add `sandbox` to your Claude Desktop config (`%APPDATA%\Claude\claude_desktop_config.json` on Windows or `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "sandbox": {
+      "command": "sandbox",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Claude Desktop automatically gains three secure tools:
+* `execute_code`: Stateless one-shot execution across TypeScript, Python, Lua, JS, Go, Rust, Java.
+* `eval_session`: Persistent multi-turn REPL execution preserving variables across conversation turns.
+* `list_languages`: Runtime diagnostics and language tier matrix.
+
+---
+
 ## Detailed Documentation
 
 * 📖 **[Developer Guide](docs/guide.md)** — Complete step-by-step manual covering VFS, REPL sessions, network serving, and limits.
+* 🤖 **[Model Context Protocol (MCP) Guide](docs/mcp.md)** — Claude Desktop, Cursor IDE, and OpenAI/Anthropic Go SDK setup.
 * 🛡️ **[Security Architecture & Threat Model](docs/security.md)** — Defense-in-depth isolation guarantees, memory page limits, and container hardening.
 * 🌐 **[Network Policy & SSRF Guide](docs/network.md)** — Outbound allow-lists, pinned DNS resolution, and metadata endpoint blocking.
 * 📦 **[Language Packs Reference](docs/languages.md)** — Per-runtime capabilities, startup metrics, and standard library support.
-* 🚀 **[Serving Network Services](docs/serve.md)** — Reverse proxy design, loopback-by-default binding, and bearer token auth.
-* 📊 **[Performance Benchmarks](docs/benchmarks.md)** — Startup latency and memory consumption data.
 
 ---
 

@@ -60,7 +60,7 @@ func WithVersion(v string) Option {
 func NewServer(sb *sandbox.Sandbox, opts ...Option) *Server {
 	s := &Server{
 		sb:       sb,
-		version:  "0.1.0",
+		version:  "0.2.0",
 		sessions: make(map[string]sandbox.Session),
 	}
 	for _, opt := range opts {

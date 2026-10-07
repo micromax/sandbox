@@ -33,7 +33,7 @@ import (
 	packwasm "github.com/micromax/sandbox/packs/wasm"
 )
 
-var version = "0.1.0"
+var version = "0.2.0"
 
 func initSandbox() (*sandbox.Sandbox, *backendwasm.Backend, *backenddocker.Backend, error) {
 	wBackend, err := backendwasm.New()
