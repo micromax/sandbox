@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/micromax/sandbox/artifact"
 	backenddocker "github.com/micromax/sandbox/backend/docker"
 	backendwasm "github.com/micromax/sandbox/backend/wasm"
+	"github.com/micromax/sandbox/mcp"
 	packbash "github.com/micromax/sandbox/packs/bash"
 	packgo "github.com/micromax/sandbox/packs/go"
 	packjava "github.com/micromax/sandbox/packs/java"
@@ -108,6 +110,8 @@ func main() {
 		handleREPL(args)
 	case "serve":
 		handleServe(args)
+	case "mcp":
+		handleMCP(args)
 	case "doctor":
 		handleDoctor(args)
 	case "packs":
@@ -128,6 +132,7 @@ func printUsage() {
   sandbox run   [flags] <file>       Run code in sandbox
   sandbox repl  [flags]              Start stateful interactive REPL session
   sandbox serve [flags] <file>       Serve a network service behind host proxy
+  sandbox mcp                        Start Model Context Protocol (MCP) server
   sandbox doctor                     Check system capabilities and dependencies
   sandbox packs list                 List supported language packs
   sandbox version                    Print version information
@@ -473,5 +478,24 @@ func handlePacks(args []string) {
 	fmt.Println("Registered Language Packs:")
 	for _, p := range sb.Languages() {
 		fmt.Printf("  • %s\n", p)
+	}
+}
+
+func handleMCP(args []string) {
+	sb, _, _, err := initSandbox()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize sandbox for MCP: %v\n", err)
+		os.Exit(1)
+	}
+
+	server := mcp.NewServer(sb, mcp.WithVersion(version))
+	defer server.Close()
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	if err := server.ServeStdio(ctx); err != nil && err != io.EOF {
+		fmt.Fprintf(os.Stderr, "mcp server error: %v\n", err)
+		os.Exit(1)
 	}
 }

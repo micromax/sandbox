@@ -26,7 +26,8 @@ Whether you are building an AI code interpreter, an automated grading system, a 
 8. [Serving Network Services (`Serve`)](#8-serving-network-services-serve)
 9. [Outbound Network Policies & SSRF Guards](#9-outbound-network-policies--ssrf-guards)
 10. [Command-Line Interface (CLI)](#10-command-line-interface-cli)
-11. [Troubleshooting & Best Practices](#11-troubleshooting--best-practices)
+11. [AI Agent & Model Context Protocol (MCP)](#11-ai-agent--model-context-protocol-mcp)
+12. [Troubleshooting & Best Practices](#12-troubleshooting--best-practices)
 
 ---
 
@@ -374,6 +375,9 @@ sandbox repl --lang python
 # Serve a sandboxed web app
 sandbox serve --lang js --port 8080 server.js
 
+# Start Model Context Protocol (MCP) server for Claude / Cursor
+sandbox mcp
+
 # Health check and environment diagnostics
 sandbox doctor
 
@@ -383,7 +387,35 @@ sandbox packs list
 
 ---
 
-## 11. Troubleshooting & Best Practices
+## 11. AI Agent & Model Context Protocol (MCP)
+
+`micromax/sandbox` provides native support for the **Model Context Protocol (MCP)**, allowing AI assistants like **Claude Desktop**, **Cursor**, and custom LLM agents to use the sandbox as their secure code execution engine.
+
+### Quick Setup with Claude Desktop
+
+Add `sandbox` to `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+
+```json
+{
+  "mcpServers": {
+    "sandbox": {
+      "command": "sandbox",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Claude Desktop will automatically acquire 3 secure tools:
+* `execute_code`: One-shot isolated execution for Python, TypeScript, JavaScript, Lua, Go, Rust, Java, and Bash.
+* `eval_session`: Persistent multi-turn REPL execution that preserves variables across conversation turns.
+* `list_languages`: Environment inspection.
+
+For complete setup guides and OpenAI/Anthropic Go SDK examples, see [docs/mcp.md](file:///c:/Users/hp/sandbox/docs/mcp.md).
+
+---
+
+## 12. Troubleshooting & Best Practices
 
 | Symptom | Cause | Solution |
 |---|---|---|

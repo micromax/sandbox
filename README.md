@@ -18,6 +18,7 @@
 * **Stateful REPL Sessions**: Multi-turn conversational code execution for AI agents and notebooks.
 * **Serving Network Ports (`Serve`)**: Expose guest web services through a secured host-side reverse proxy with rate limiting and bearer token authentication.
 * **Deny-By-Default Outbound Networking**: Optional host allow-lists with SSRF guards and DNS rebinding prevention.
+* **AI Agent & Model Context Protocol (MCP)**: Built-in `sandbox mcp` server for Claude Desktop, Cursor, and LLM agent function calling.
 * **Unified CLI (`sandbox`)**: Terminal companion for running, testing, serving, and diagnosing sandboxes.
 
 ---
