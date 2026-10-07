@@ -108,8 +108,11 @@ func (p *Pack) Validate() error {
 		return fmt.Errorf("%w: %q defines no backend spec", ErrInvalidPack, p.Name)
 	}
 	if p.Wasm != nil {
-		if err := p.Wasm.Module.validate(); err != nil {
-			return fmt.Errorf("%w: %q wasm module: %v", ErrInvalidPack, p.Name, err)
+		// A raw wasm runner pack provides module bytecode at execution time via Spec.
+		if p.Name != "wasm" && p.Name != "wasi" && p.Name != "wasip1" {
+			if err := p.Wasm.Module.validate(); err != nil {
+				return fmt.Errorf("%w: %q wasm module: %v", ErrInvalidPack, p.Name, err)
+			}
 		}
 		for _, m := range p.Wasm.Mounts {
 			if err := m.Artifact.validate(); err != nil {

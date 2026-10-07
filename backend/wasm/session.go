@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/micromax/sandbox"
+	"github.com/micromax/sandbox/packs/ts"
 	"github.com/micromax/sandbox/vfs"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -143,7 +144,7 @@ func (s *wasmSession) startLocked(ctx context.Context) error {
 	var args []string
 
 	switch s.req.Pack.Name {
-	case "js", "javascript":
+	case "js", "javascript", "ts", "typescript":
 		driverFileName = "driver.js"
 		args = []string{"qjs", "--std", "/work/driver.js"}
 	case "python", "py", "python3":
@@ -333,6 +334,9 @@ func (s *wasmSession) Eval(ctx context.Context, code string) (*sandbox.Result, e
 		tokenBytes = []byte(fmt.Sprintf("%d", time.Now().UnixNano()))
 	}
 	token := hex.EncodeToString(tokenBytes)
+	if s.lang == "ts" || s.lang == "typescript" {
+		code = ts.Transpile(code)
+	}
 	b64Code := base64.StdEncoding.EncodeToString([]byte(code))
 
 	maxOutput := s.limits.MaxOutput

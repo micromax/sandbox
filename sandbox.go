@@ -282,6 +282,7 @@ func (s *Sandbox) Run(ctx context.Context, spec Spec) (*Result, error) {
 			FSFiles:    st.Files + st.Dirs,
 		},
 		Backend: backend.Name(),
+		NetLog:  outcome.NetLog,
 	}
 
 	switch {

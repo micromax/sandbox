@@ -185,7 +185,7 @@ func (b *Backend) Serve(ctx context.Context, req *sandbox.ServeRequest) (sandbox
 	}
 
 	// Install adapter bridge
-	if req.Pack.Name == "js" || req.Pack.Name == "javascript" || req.Pack.Name == "quickjs" {
+	if req.Pack.Name == "js" || req.Pack.Name == "javascript" || req.Pack.Name == "quickjs" || req.Pack.Name == "ts" || req.Pack.Name == "typescript" {
 		if _, err := sess.Eval(ctx, jsServeBridge); err != nil {
 			_ = sess.Close()
 			return nil, fmt.Errorf("installing js serve bridge: %w", err)
@@ -223,7 +223,7 @@ func (b *Backend) Serve(ctx context.Context, req *sandbox.ServeRequest) (sandbox
 		reqJSON, _ := json.Marshal(reqMap)
 
 		var evalCmd string
-		if req.Pack.Name == "js" || req.Pack.Name == "javascript" || req.Pack.Name == "quickjs" {
+		if req.Pack.Name == "js" || req.Pack.Name == "javascript" || req.Pack.Name == "quickjs" || req.Pack.Name == "ts" || req.Pack.Name == "typescript" {
 			evalCmd = fmt.Sprintf("__bridge_fetch(%s)", strconv.Quote(string(reqJSON)))
 		} else {
 			evalCmd = fmt.Sprintf("__bridge_http(%s)", strconv.Quote(string(reqJSON)))

@@ -57,4 +57,6 @@ type Outcome struct {
 	ExitCode int
 	// PeakMemory is the peak guest memory in bytes, or 0 if unknown.
 	PeakMemory uint64
+	// NetLog records outbound requests if network was enabled.
+	NetLog []NetLogEntry
 }

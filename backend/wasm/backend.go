@@ -6,19 +6,25 @@
 package wasm
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/micromax/sandbox"
 	"github.com/micromax/sandbox/artifact"
+	"github.com/micromax/sandbox/netpolicy"
+	"github.com/micromax/sandbox/packs/ts"
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 	"github.com/tetratelabs/wazero/sys"
 )
@@ -74,6 +80,11 @@ func (b *Backend) Supports(p *sandbox.Pack) bool {
 	return p != nil && p.Wasm != nil
 }
 
+// SupportsNetwork implements [sandbox.NetworkCapable].
+func (b *Backend) SupportsNetwork() bool {
+	return true
+}
+
 // Run executes the request in an isolated WebAssembly sandbox.
 func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcome, error) {
 	if req.Pack == nil || req.Pack.Wasm == nil {
@@ -83,9 +94,30 @@ func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcom
 	wasmSpec := req.Pack.Wasm
 
 	// 1. Fetch / verify wasm module binary
-	moduleData, err := b.store.Load(ctx, wasmSpec.Module)
-	if err != nil {
-		return sandbox.Outcome{}, fmt.Errorf("loading wasm module %s: %w", wasmSpec.Module.Name, err)
+	var moduleData []byte
+	isRawWasm := req.Pack.Name == "wasm" || req.Pack.Name == "wasi" || req.Pack.Name == "wasip1"
+	if isRawWasm {
+		if raw, ok := req.Spec.Files["main.wasm"]; ok && len(raw) > 0 {
+			moduleData = raw
+		} else if raw, ok := req.FS.Snapshot("in")["main.wasm"]; ok && len(raw) > 0 {
+			moduleData = raw
+		} else if strings.HasPrefix(req.Spec.Code, "\x00asm") {
+			moduleData = []byte(req.Spec.Code)
+		} else if wasmSpec.Module.Name != "" && wasmSpec.Module.Name != "custom.wasm" {
+			var err error
+			moduleData, err = b.store.Load(ctx, wasmSpec.Module)
+			if err != nil {
+				return sandbox.Outcome{}, fmt.Errorf("loading wasm module %s: %w", wasmSpec.Module.Name, err)
+			}
+		} else {
+			return sandbox.Outcome{}, fmt.Errorf("%w: wasm pack requires WebAssembly bytecode in Code or Files[\"main.wasm\"]", sandbox.ErrInvalidSpec)
+		}
+	} else {
+		var err error
+		moduleData, err = b.store.Load(ctx, wasmSpec.Module)
+		if err != nil {
+			return sandbox.Outcome{}, fmt.Errorf("loading wasm module %s: %w", wasmSpec.Module.Name, err)
+		}
 	}
 
 	// 2. Prepare temporary directory structure for this run
@@ -123,31 +155,49 @@ func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcom
 
 	// Prepare arguments and script file
 	args := make([]string, 0, len(wasmSpec.Args)+len(req.Spec.Args)+2)
-	args = append(args, wasmSpec.Args...)
-
-	if len(req.Spec.Args) > 0 {
-		args = append(args, req.Spec.Args...)
-	} else if req.Spec.Code != "" {
-		// Default invocation by language
-		switch req.Pack.Name {
-		case "js", "javascript":
-			codePath := filepath.Join(workDir, "__main__.js")
-			if err := os.WriteFile(codePath, []byte(req.Spec.Code), 0o644); err != nil {
-				return sandbox.Outcome{}, err
+	if isRawWasm {
+		args = append(args, "main.wasm")
+		if len(req.Spec.Args) > 0 {
+			args = append(args, req.Spec.Args...)
+		}
+	} else {
+		args = append(args, wasmSpec.Args...)
+		if len(req.Spec.Args) > 0 {
+			args = append(args, req.Spec.Args...)
+		} else if req.Spec.Code != "" {
+			switch req.Pack.Name {
+			case "js", "javascript":
+				codePath := filepath.Join(workDir, "__main__.js")
+				if err := os.WriteFile(codePath, []byte(req.Spec.Code), 0o644); err != nil {
+					return sandbox.Outcome{}, err
+				}
+				args = append(args, "/work/__main__.js")
+			case "ts", "typescript":
+				jsCode := ts.Transpile(req.Spec.Code)
+				codePath := filepath.Join(workDir, "__main__.js")
+				if err := os.WriteFile(codePath, []byte(jsCode), 0o644); err != nil {
+					return sandbox.Outcome{}, err
+				}
+				args = append(args, "/work/__main__.js")
+			case "python", "py":
+				codePath := filepath.Join(workDir, "__main__.py")
+				if err := os.WriteFile(codePath, []byte(req.Spec.Code), 0o644); err != nil {
+					return sandbox.Outcome{}, err
+				}
+				args = append(args, "-B", "/work/__main__.py")
+			case "lua", "lua54", "luawasi":
+				codePath := filepath.Join(workDir, "__main__.lua")
+				if err := os.WriteFile(codePath, []byte(req.Spec.Code), 0o644); err != nil {
+					return sandbox.Outcome{}, err
+				}
+				args = append(args, "/work/__main__.lua")
+			default:
+				codePath := filepath.Join(workDir, "main")
+				if err := os.WriteFile(codePath, []byte(req.Spec.Code), 0o644); err != nil {
+					return sandbox.Outcome{}, err
+				}
+				args = append(args, "/work/main")
 			}
-			args = append(args, "/work/__main__.js")
-		case "python", "py":
-			codePath := filepath.Join(workDir, "__main__.py")
-			if err := os.WriteFile(codePath, []byte(req.Spec.Code), 0o644); err != nil {
-				return sandbox.Outcome{}, err
-			}
-			args = append(args, "-B", "/work/__main__.py")
-		default:
-			codePath := filepath.Join(workDir, "main")
-			if err := os.WriteFile(codePath, []byte(req.Spec.Code), 0o644); err != nil {
-				return sandbox.Outcome{}, err
-			}
-			args = append(args, "/work/main")
 		}
 	}
 
@@ -200,6 +250,90 @@ func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcom
 	defer runtime.Close(execCtx)
 
 	wasi_snapshot_preview1.MustInstantiate(execCtx, runtime)
+	unstableBuilder := runtime.NewHostModuleBuilder("wasi_unstable")
+	wasi_snapshot_preview1.NewFunctionExporter().ExportFunctions(unstableBuilder)
+	if _, err := unstableBuilder.Instantiate(execCtx); err != nil {
+		return sandbox.Outcome{}, fmt.Errorf("instantiating wasi_unstable: %w", err)
+	}
+
+	var netLogs []sandbox.NetLogEntry
+	var netMu sync.Mutex
+
+	if req.Spec.Net != nil {
+		netPolicy := req.Spec.Net
+		matcher := netpolicy.NewHostMatcher(netPolicy.AllowHosts)
+		limiter := netpolicy.NewRequestLimiter(netPolicy.MaxRequests, netPolicy.MaxBytes, 0)
+		rv := netpolicy.NewRedirectValidator(netPolicy.AllowPrivate, netPolicy.AllowHosts)
+		netClient := netpolicy.NewHTTPClient(matcher, netPolicy.AllowPorts, netPolicy.AllowPrivate, limiter, rv)
+
+		netBuilder := runtime.NewHostModuleBuilder("sandbox_net")
+		netBuilder.NewFunctionBuilder().
+			WithFunc(func(ctx context.Context, m api.Module, mPtr, mLen, uPtr, uLen, bPtr, bLen, respPtr, respMax, writtenPtr uint32) uint32 {
+				mem := m.Memory()
+				mBytes, _ := mem.Read(mPtr, mLen)
+				uBytes, _ := mem.Read(uPtr, uLen)
+				bBytes, _ := mem.Read(bPtr, bLen)
+
+				method := string(mBytes)
+				reqURL := string(uBytes)
+
+				httpReq, err := http.NewRequestWithContext(ctx, method, reqURL, bytes.NewReader(bBytes))
+				if err != nil {
+					netMu.Lock()
+					netLogs = append(netLogs, sandbox.NetLogEntry{
+						Timestamp: time.Now(),
+						Method:    method,
+						URL:       reqURL,
+						Error:     err.Error(),
+					})
+					netMu.Unlock()
+					return 500
+				}
+
+				start := time.Now()
+				resp, err := netClient.Do(httpReq)
+				duration := time.Since(start)
+				if err != nil {
+					netMu.Lock()
+					netLogs = append(netLogs, sandbox.NetLogEntry{
+						Timestamp: start,
+						Method:    method,
+						URL:       reqURL,
+						Duration:  duration,
+						Error:     err.Error(),
+					})
+					netMu.Unlock()
+					return 502
+				}
+				defer resp.Body.Close()
+
+				body, _ := io.ReadAll(resp.Body)
+				toWrite := len(body)
+				if uint32(toWrite) > respMax {
+					toWrite = int(respMax)
+				}
+				mem.Write(respPtr, body[:toWrite])
+				mem.WriteUint32Le(writtenPtr, uint32(toWrite))
+
+				netMu.Lock()
+				netLogs = append(netLogs, sandbox.NetLogEntry{
+					Timestamp:        start,
+					Method:           method,
+					URL:              reqURL,
+					StatusCode:       resp.StatusCode,
+					BytesTransferred: int64(toWrite),
+					Duration:         duration,
+				})
+				netMu.Unlock()
+
+				return uint32(resp.StatusCode)
+			}).
+			Export("http_request")
+
+		if _, err := netBuilder.Instantiate(execCtx); err != nil {
+			return sandbox.Outcome{}, fmt.Errorf("instantiating sandbox_net host module: %w", err)
+		}
+	}
 
 	compiled, err := runtime.CompileModule(execCtx, moduleData)
 	if err != nil {
@@ -233,7 +367,9 @@ func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcom
 	}
 
 	// 6. Map errors
-	outcome := sandbox.Outcome{}
+	outcome := sandbox.Outcome{
+		NetLog: netLogs,
+	}
 	var runErr error
 
 	if instErr != nil {

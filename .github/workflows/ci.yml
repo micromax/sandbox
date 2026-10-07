@@ -24,6 +24,8 @@ jobs:
         run: go vet ./...
       - name: Test (race)
         run: go test -race -count=1 ./...
+      - name: Build CLI
+        run: go build -v ./cmd/sandbox
 
   lint:
     runs-on: ubuntu-latest

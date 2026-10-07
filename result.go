@@ -71,6 +71,19 @@ type Result struct {
 	Backend string
 	// Restarted reports whether the session was restarted prior to this eval.
 	Restarted bool
+	// NetLog records outbound requests if network was enabled.
+	NetLog []NetLogEntry
+}
+
+// NetLogEntry records one outbound network request made by the guest.
+type NetLogEntry struct {
+	Timestamp        time.Time
+	Method           string
+	URL              string
+	StatusCode       int
+	BytesTransferred int64
+	Duration         time.Duration
+	Error            string
 }
 
 // Usage reports resources consumed by one execution.

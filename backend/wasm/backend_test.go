@@ -329,3 +329,22 @@ func TestConcurrentSandboxes(t *testing.T) {
 		t.Fatalf("concurrent run error: %v", err)
 	}
 }
+
+func TestWasmNetworkPolicy(t *testing.T) {
+	sb := newTestSandbox(t)
+	res, err := sb.Run(context.Background(), sandbox.Spec{
+		Lang: "js",
+		Code: `console.log("network policy active");`,
+		Net: &sandbox.NetPolicy{
+			AllowHosts: []string{"api.example.com"},
+			AllowPorts: []int{443},
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error with network policy: %v", err)
+	}
+	if !strings.Contains(string(res.Stdout), "network policy active") {
+		t.Errorf("got %q, want network policy active", string(res.Stdout))
+	}
+}
+
