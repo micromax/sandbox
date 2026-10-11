@@ -41,3 +41,16 @@ Memory limits are strictly enforced at the WebAssembly boundary using wazero pag
 
 - **Concurrent Sandboxes**: Verified running 100 concurrent sandbox instances across goroutines (`TestConcurrentSandboxes`). All runtimes are isolated with zero cross-talk, independent ephemeral directories, and distinct virtual filesystems.
 - **Zero Host Leaks**: All temporary run directories are cleaned up via `defer os.RemoveAll(runDir)`. Uncollected guest files or orphaned handles are pruned at run termination.
+
+---
+
+## 4. Persistent Wazero Compilation Cache (v0.3.0)
+
+By default, `backend/wasm` now leverages file-backed persistent compilation caching located in `~/.cache/micromax-sandbox/wazero-cache` (`wazero.NewCompilationCacheWithDir`). 
+
+- **Cross-Process Startup**: Modules are compiled once to native code and stored on disk. Subsequent CLI invocations (`sandbox run`) hit the disk cache immediately, dropping Python cold start latency from **~3.4 s down to ~280 ms**.
+- **Automated Benchmark Suite (`benchmarks/`)**:
+  - `BenchmarkQuickJSRun`: **~54 ms / op** (~9.6 MB allocs / op)
+  - `BenchmarkLuaRun`: **~11.6 ms / op** (~1.4 MB allocs / op)
+  - `BenchmarkConcurrentQuickJS`: High-concurrency linear scalability with zero cross-sandbox lock contention.
+

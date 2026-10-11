@@ -450,3 +450,33 @@ func (second) Supports(*sandbox.Pack) bool { return false }
 func (second) Run(context.Context, *sandbox.Request) (sandbox.Outcome, error) {
 	return sandbox.Outcome{}, errors.New("second must never run")
 }
+
+func TestStreamingStdoutAndStderr(t *testing.T) {
+	sb := newSB(t)
+	var streamBuf strings.Builder
+	var cbChunks []string
+
+	spec := sandbox.Spec{
+		Lang:         "echo",
+		Code:         "streamed execution line 1\nstreamed execution line 2\n",
+		StdoutWriter: &streamBuf,
+		OnStdout: func(chunk []byte) {
+			cbChunks = append(cbChunks, string(chunk))
+		},
+	}
+
+	res, err := sb.Run(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if streamBuf.String() != string(res.Stdout) {
+		t.Errorf("streamBuf %q != res.Stdout %q", streamBuf.String(), string(res.Stdout))
+	}
+
+	combinedCb := strings.Join(cbChunks, "")
+	if combinedCb != string(res.Stdout) {
+		t.Errorf("combined callback chunks %q != res.Stdout %q", combinedCb, string(res.Stdout))
+	}
+}
+

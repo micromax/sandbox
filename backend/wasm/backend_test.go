@@ -1,6 +1,7 @@
 package wasm_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/micromax/sandbox"
 	"github.com/micromax/sandbox/backend/wasm"
+	"github.com/micromax/sandbox/packages"
 	"github.com/micromax/sandbox/packs/js"
 	"github.com/micromax/sandbox/packs/python"
 )
@@ -347,4 +349,135 @@ func TestWasmNetworkPolicy(t *testing.T) {
 		t.Errorf("got %q, want network policy active", string(res.Stdout))
 	}
 }
+
+func TestWasmCompilationCacheOptions(t *testing.T) {
+	// Test in-memory compilation cache option
+	bMem, err := wasm.New(wasm.WithInMemoryCompilationCache())
+	if err != nil {
+		t.Fatalf("wasm.New with in-memory cache failed: %v", err)
+	}
+	defer bMem.Close(context.Background())
+
+	sbMem, err := sandbox.New(
+		sandbox.WithBackends(bMem),
+		sandbox.WithPacks(js.Pack()),
+	)
+	if err != nil {
+		t.Fatalf("sandbox.New failed: %v", err)
+	}
+
+	res, err := sbMem.Run(context.Background(), sandbox.Spec{
+		Lang: "js",
+		Code: `console.log("in-memory cache ok");`,
+	})
+	if err != nil {
+		t.Fatalf("sbMem.Run failed: %v", err)
+	}
+	if !strings.Contains(string(res.Stdout), "in-memory cache ok") {
+		t.Errorf("got %q, want 'in-memory cache ok'", string(res.Stdout))
+	}
+
+	// Test persistent directory compilation cache option
+	tempCacheDir := t.TempDir()
+	bDir, err := wasm.New(wasm.WithCompilationCacheDir(tempCacheDir))
+	if err != nil {
+		t.Fatalf("wasm.New with cache dir failed: %v", err)
+	}
+	defer bDir.Close(context.Background())
+
+	sbDir, err := sandbox.New(
+		sandbox.WithBackends(bDir),
+		sandbox.WithPacks(js.Pack()),
+	)
+	if err != nil {
+		t.Fatalf("sandbox.New failed: %v", err)
+	}
+
+	// First execution writes to cache directory
+	res1, err := sbDir.Run(context.Background(), sandbox.Spec{
+		Lang: "js",
+		Code: `console.log("disk cache run 1");`,
+	})
+	if err != nil {
+		t.Fatalf("first run failed: %v", err)
+	}
+	if !strings.Contains(string(res1.Stdout), "disk cache run 1") {
+		t.Errorf("got %q, want 'disk cache run 1'", string(res1.Stdout))
+	}
+
+	// Second execution hits the cache
+	res2, err := sbDir.Run(context.Background(), sandbox.Spec{
+		Lang: "js",
+		Code: `console.log("disk cache run 2");`,
+	})
+	if err != nil {
+		t.Fatalf("second run failed: %v", err)
+	}
+	if !strings.Contains(string(res2.Stdout), "disk cache run 2") {
+		t.Errorf("got %q, want 'disk cache run 2'", string(res2.Stdout))
+	}
+}
+
+func TestPythonGuestPackages(t *testing.T) {
+	// 1. Create a fake pure-python wheel in memory
+	var wheelBuf bytes.Buffer
+	zw := zip.NewWriter(&wheelBuf)
+	f, err := zw.Create("greet/__init__.py")
+	if err != nil {
+		t.Fatalf("creating zip file: %v", err)
+	}
+	_, _ = f.Write([]byte("def say_hi(name):\n    return f'Hello, {name} from package!'\n"))
+	_ = zw.Close()
+
+	// 2. Setup custom package store
+	pkgDir := t.TempDir()
+	store, err := packages.NewStore(pkgDir)
+	if err != nil {
+		t.Fatalf("packages.NewStore failed: %v", err)
+	}
+	if err := store.Add("python", "greet", "greet-0.1.0-py3-none-any.whl", wheelBuf.Bytes()); err != nil {
+		t.Fatalf("store.Add failed: %v", err)
+	}
+
+	wBackend, err := wasm.New(wasm.WithPackageStore(store))
+	if err != nil {
+		t.Fatalf("wasm.New failed: %v", err)
+	}
+	defer wBackend.Close(context.Background())
+
+	sb, err := sandbox.New(
+		sandbox.WithBackends(wBackend),
+		sandbox.WithPacks(python.Pack()),
+	)
+	if err != nil {
+		t.Fatalf("sandbox.New failed: %v", err)
+	}
+
+	// 3. Run python code that imports the package
+	res, err := sb.Run(context.Background(), sandbox.Spec{
+		Lang: "python",
+		Code: `
+import greet
+print(greet.say_hi("Antigravity"))
+`,
+		Packages: []string{"greet"},
+	})
+	if err != nil {
+		t.Fatalf("sb.Run with package failed: %v", err)
+	}
+	if !strings.Contains(string(res.Stdout), "Hello, Antigravity from package!") {
+		t.Errorf("expected greet output, got: %s", string(res.Stdout))
+	}
+
+	// 4. Test missing package returns ErrPackageNotFound
+	_, missingErr := sb.Run(context.Background(), sandbox.Spec{
+		Lang:     "python",
+		Code:     `import nonexistent`,
+		Packages: []string{"nonexistent"},
+	})
+	if !errors.Is(missingErr, sandbox.ErrPackageNotFound) {
+		t.Errorf("expected ErrPackageNotFound, got: %v", missingErr)
+	}
+}
+
 

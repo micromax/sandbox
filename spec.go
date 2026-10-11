@@ -21,7 +21,7 @@ type Spec struct {
 	// inherited from the host.
 	Env map[string]string
 	// Stdin is the program's standard input. Nil means empty.
-	Stdin io.Reader
+	Stdin io.Reader `json:"-"`
 	// Files are injected read-only under /in. Keys are slash-separated
 	// paths relative to /in and are validated by [vfs.Clean].
 	Files map[string][]byte
@@ -29,6 +29,16 @@ type Spec struct {
 	Limits *Limits
 	// Net is the network policy. Nil means no network access at all.
 	Net *NetPolicy
+	// Packages lists guest dependencies to inject from the local package cache.
+	Packages []string `json:"packages,omitempty"`
+	// StdoutWriter streams stdout chunks to an io.Writer in real time as they are emitted.
+	StdoutWriter io.Writer `json:"-"`
+	// StderrWriter streams stderr chunks to an io.Writer in real time as they are emitted.
+	StderrWriter io.Writer `json:"-"`
+	// OnStdout is invoked with chunks of stdout data in real time as they are emitted.
+	OnStdout func(chunk []byte) `json:"-"`
+	// OnStderr is invoked with chunks of stderr data in real time as they are emitted.
+	OnStderr func(chunk []byte) `json:"-"`
 }
 
 // NetPolicy describes the outbound network access granted to a guest. The

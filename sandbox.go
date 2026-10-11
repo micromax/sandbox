@@ -233,7 +233,8 @@ func (s *Sandbox) Run(ctx context.Context, spec Spec) (*Result, error) {
 	}
 
 	group := limitbuf.NewGroup(lim.MaxOutput, ErrOutputLimit)
-	stdout, stderr := group.NewWriter(), group.NewWriter()
+	stdout := group.NewWriterWithTee(spec.StdoutWriter, spec.OnStdout)
+	stderr := group.NewWriterWithTee(spec.StderrWriter, spec.OnStderr)
 	stdin := spec.Stdin
 	if stdin == nil {
 		stdin = strings.NewReader("")

@@ -21,6 +21,7 @@ import (
 	backenddocker "github.com/micromax/sandbox/backend/docker"
 	backendwasm "github.com/micromax/sandbox/backend/wasm"
 	"github.com/micromax/sandbox/mcp"
+	"github.com/micromax/sandbox/packages"
 	packbash "github.com/micromax/sandbox/packs/bash"
 	packgo "github.com/micromax/sandbox/packs/go"
 	packjava "github.com/micromax/sandbox/packs/java"
@@ -116,6 +117,8 @@ func main() {
 		handleDoctor(args)
 	case "packs":
 		handlePacks(args)
+	case "packages":
+		handlePackages(args)
 	case "version", "--version", "-v":
 		fmt.Printf("sandbox v%s (github.com/micromax/sandbox)\n", version)
 	case "help", "--help", "-h":
@@ -133,6 +136,7 @@ func printUsage() {
   sandbox repl  [flags]              Start stateful interactive REPL session
   sandbox serve [flags] <file>       Serve a network service behind host proxy
   sandbox mcp                        Start Model Context Protocol (MCP) server
+  sandbox packages [list|add]        Manage cached offline packages
   sandbox doctor                     Check system capabilities and dependencies
   sandbox packs list                 List supported language packs
   sandbox version                    Print version information
@@ -142,6 +146,7 @@ Commands & Flags:
     --lang <name>       Language pack (inferred from file extension if omitted)
     --timeout <dur>     Execution deadline (e.g. 5s, 1m)
     --mem <bytes>       Memory limit in bytes (e.g. 64M, 128M)
+    --pkg <packages>    Comma-separated list of packages to inject (e.g. requests,numpy)
     --net <hosts>       Comma-separated allow-list for outbound network
     --json              Output execution results in JSON format
 
@@ -160,6 +165,7 @@ func handleRun(args []string) {
 	lang := fs.String("lang", "", "Language name")
 	timeout := fs.Duration("timeout", 10*time.Second, "Wall-clock timeout")
 	mem := fs.String("mem", "", "Memory limit (e.g. 64M, 128M)")
+	pkgFlag := fs.String("pkg", "", "Comma-separated list of guest packages to inject")
 	netHosts := fs.String("net", "", "Comma-separated outbound host allow-list")
 	asJSON := fs.Bool("json", false, "Output results in JSON format")
 
@@ -225,11 +231,24 @@ func handleRun(args []string) {
 		Limits: limits,
 		Net:    netPolicy,
 	}
+	if *pkgFlag != "" {
+		for _, p := range strings.Split(*pkgFlag, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				spec.Packages = append(spec.Packages, p)
+			}
+		}
+	}
 
 	if targetLang == "wasm" || targetLang == "wasi" || targetLang == "wasip1" {
 		spec.Files = map[string][]byte{"main.wasm": data}
 	} else {
 		spec.Code = string(data)
+	}
+
+	if !*asJSON {
+		spec.StdoutWriter = os.Stdout
+		spec.StderrWriter = os.Stderr
 	}
 
 	ctx := context.Background()
@@ -260,15 +279,6 @@ func handleRun(args []string) {
 			os.Exit(1)
 		}
 		return
-	}
-
-	if res != nil {
-		if len(res.Stdout) > 0 {
-			os.Stdout.Write(res.Stdout)
-		}
-		if len(res.Stderr) > 0 {
-			os.Stderr.Write(res.Stderr)
-		}
 	}
 
 	if runErr != nil {
@@ -496,6 +506,66 @@ func handleMCP(args []string) {
 
 	if err := server.ServeStdio(ctx); err != nil && err != io.EOF {
 		fmt.Fprintf(os.Stderr, "mcp server error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func handlePackages(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: sandbox packages [list|add] [args]")
+		return
+	}
+	store, err := packages.NewStore()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error initializing package store: %v\n", err)
+		os.Exit(1)
+	}
+
+	switch args[0] {
+	case "list":
+		lang := "python"
+		if len(args) > 1 {
+			lang = args[1]
+		}
+		pkgs, err := store.List(lang)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error listing packages: %v\n", err)
+			os.Exit(1)
+		}
+		if len(pkgs) == 0 {
+			fmt.Printf("No cached packages found for language %q (cache dir: %s)\n", lang, store.Dir())
+			return
+		}
+		fmt.Printf("Cached packages for %s:\n", lang)
+		for _, p := range pkgs {
+			fmt.Printf("  • %-20s (%d bytes) -> %s\n", p.Name, p.Size, p.Path)
+		}
+	case "add":
+		fs := flag.NewFlagSet("packages add", flag.ExitOnError)
+		lang := fs.String("lang", "python", "Target language")
+		name := fs.String("name", "", "Package name (inferred from filename if empty)")
+		if err := fs.Parse(args[1:]); err != nil || fs.NArg() < 1 {
+			fmt.Println("Usage: sandbox packages add [--lang python] [--name pkgname] <file.whl>")
+			os.Exit(1)
+		}
+		filePath := fs.Arg(0)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading %s: %v\n", filePath, err)
+			os.Exit(1)
+		}
+		pkgName := *name
+		if pkgName == "" {
+			base := filepath.Base(filePath)
+			pkgName = strings.Split(base, "-")[0]
+		}
+		if err := store.Add(*lang, pkgName, filepath.Base(filePath), data); err != nil {
+			fmt.Fprintf(os.Stderr, "error caching package: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Successfully added package %q for %s to offline cache.\n", pkgName, *lang)
+	default:
+		fmt.Printf("unknown packages subcommand: %s\n", args[0])
 		os.Exit(1)
 	}
 }

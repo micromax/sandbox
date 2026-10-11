@@ -22,6 +22,7 @@ import (
 	"github.com/micromax/sandbox"
 	"github.com/micromax/sandbox/artifact"
 	"github.com/micromax/sandbox/netpolicy"
+	"github.com/micromax/sandbox/packages"
 	"github.com/micromax/sandbox/packs/ts"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -33,34 +34,112 @@ import (
 type Backend struct {
 	store      *artifact.Store
 	compCache  wazero.CompilationCache
+	pkgStore   *packages.Store
 	mu         sync.RWMutex
 	mountPaths map[string]string // cached host paths for unpacked directory mounts
 }
 
+// DefaultCacheDir returns the default system directory for the persistent compilation cache.
+func DefaultCacheDir() string {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	return filepath.Join(base, "micromax-sandbox", "wazero-cache")
+}
+
+type options struct {
+	store        *artifact.Store
+	compCache    wazero.CompilationCache
+	pkgStore     *packages.Store
+	cacheDir     string
+	inMemoryOnly bool
+}
+
 // Option configures the Wasm backend.
-type Option func(*Backend)
+type Option func(*options)
 
 // WithArtifactStore configures a custom artifact store.
 func WithArtifactStore(store *artifact.Store) Option {
-	return func(b *Backend) {
-		b.store = store
+	return func(o *options) {
+		o.store = store
+	}
+}
+
+// WithCompilationCache configures a pre-existing wazero compilation cache.
+func WithCompilationCache(cache wazero.CompilationCache) Option {
+	return func(o *options) {
+		o.compCache = cache
+	}
+}
+
+// WithCompilationCacheDir configures a persistent directory for the wazero compilation cache.
+func WithCompilationCacheDir(dir string) Option {
+	return func(o *options) {
+		o.cacheDir = dir
+	}
+}
+
+// WithInMemoryCompilationCache forces in-memory only compilation cache without writing to disk.
+func WithInMemoryCompilationCache() Option {
+	return func(o *options) {
+		o.inMemoryOnly = true
+	}
+}
+
+// WithPackageStore configures a custom package store for guest dependencies.
+func WithPackageStore(store *packages.Store) Option {
+	return func(o *options) {
+		o.pkgStore = store
 	}
 }
 
 // New creates a new Wasm backend.
 func New(opts ...Option) (*Backend, error) {
-	store, err := artifact.NewStore()
-	if err != nil {
-		return nil, fmt.Errorf("wasm: creating artifact store: %w", err)
+	cfg := options{
+		cacheDir: DefaultCacheDir(),
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	store := cfg.store
+	if store == nil {
+		var err error
+		store, err = artifact.NewStore()
+		if err != nil {
+			return nil, fmt.Errorf("wasm: creating artifact store: %w", err)
+		}
+	}
+
+	pkgStore := cfg.pkgStore
+	if pkgStore == nil {
+		var err error
+		pkgStore, err = packages.NewStore()
+		if err != nil {
+			return nil, fmt.Errorf("wasm: creating package store: %w", err)
+		}
+	}
+
+	compCache := cfg.compCache
+	if compCache == nil {
+		if cfg.inMemoryOnly || cfg.cacheDir == "" {
+			compCache = wazero.NewCompilationCache()
+		} else {
+			var err error
+			compCache, err = wazero.NewCompilationCacheWithDir(cfg.cacheDir)
+			if err != nil {
+				// Fall back gracefully to in-memory compilation cache if directory cannot be initialized
+				compCache = wazero.NewCompilationCache()
+			}
+		}
 	}
 
 	b := &Backend{
 		store:      store,
-		compCache:  wazero.NewCompilationCache(),
+		compCache:  compCache,
+		pkgStore:   pkgStore,
 		mountPaths: make(map[string]string),
-	}
-	for _, opt := range opts {
-		opt(b)
 	}
 	return b, nil
 }
@@ -150,6 +229,28 @@ func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcom
 		}
 		if err := os.WriteFile(target, content, 0o644); err != nil {
 			return sandbox.Outcome{}, err
+		}
+	}
+
+	// Resolve and extract requested guest packages
+	if len(req.Spec.Packages) > 0 {
+		switch req.Pack.Name {
+		case "python", "py":
+			sitePackagesDir := filepath.Join(inDir, "site-packages")
+			if err := os.MkdirAll(sitePackagesDir, 0o755); err != nil {
+				return sandbox.Outcome{}, err
+			}
+			for _, pkgName := range req.Spec.Packages {
+				wheelData, _, err := b.pkgStore.Find("python", pkgName)
+				if err != nil {
+					return sandbox.Outcome{}, fmt.Errorf("%w: %q for %s", sandbox.ErrPackageNotFound, pkgName, req.Pack.Name)
+				}
+				if err := packages.ExtractWheel(sitePackagesDir, wheelData); err != nil {
+					return sandbox.Outcome{}, fmt.Errorf("extracting wheel for %q: %w", pkgName, err)
+				}
+			}
+		default:
+			return sandbox.Outcome{}, fmt.Errorf("%w: packages not supported for %s", sandbox.ErrUnsupported, req.Pack.Name)
 		}
 	}
 
@@ -357,7 +458,7 @@ func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcom
 	// Common language defaults
 	if req.Pack.Name == "python" || req.Pack.Name == "py" {
 		modConfig = modConfig.WithEnv("PYTHONHOME", "/")
-		modConfig = modConfig.WithEnv("PYTHONPATH", "/lib/python3.13")
+		modConfig = modConfig.WithEnv("PYTHONPATH", "/lib/python3.13:/in/site-packages")
 	}
 
 	// 5. Instantiate and execute module

@@ -270,7 +270,79 @@ Path traversal attacks (e.g. `../etc/passwd`, drive letters `C:`, NUL bytes) are
 
 ---
 
-## 7. Stateful REPL Sessions
+## 7. Real-Time Output Streaming & Server-Sent Events (SSE)
+
+For long-running tasks or interactive LLM tools, `sandbox` supports chunk-by-chunk real-time output streaming directly into standard writers or event callbacks:
+
+```go
+spec := sandbox.Spec{
+    Lang: "python",
+    Code: `
+        import time
+        for i in range(5):
+            print(f"Step {i+1}/5 done", flush=True)
+            time.Sleep(0.5)
+    `,
+    // Stream directly to any io.Writer:
+    StdoutWriter: os.Stdout,
+    StderrWriter: os.Stderr,
+    // Or receive individual chunks via callbacks:
+    OnStdout: func(chunk []byte) {
+        log.Printf("[LIVE STDOUT] %s", string(chunk))
+    },
+}
+res, err := sb.Run(ctx, spec)
+```
+
+### HTTP Server-Sent Events (SSE) Handler
+
+The `sb.SSEHandler()` returns a production-ready HTTP handler (`POST /api/run`) that streams execution progress over `text/event-stream`:
+
+```go
+http.Handle("/api/run", sb.SSEHandler())
+log.Fatal(http.ListenAndServe(":8080", nil))
+```
+
+Events emitted:
+- `event: start` with metadata (`lang`, timestamp).
+- `event: stdout` with chunk text.
+- `event: stderr` with warning/error text.
+- `event: done` with `exit_code`, `duration`, and backend name.
+
+---
+
+## 8. Guest Package & Dependency Management
+
+Guests run in air-gapped isolation by default, but untrusted scripts often require third-party packages (e.g. `requests`, `numpy`, or custom libraries). `micromax/sandbox` provides a host-side content-addressed package cache (`~/.cache/micromax-sandbox/packages/`).
+
+### In Pure WebAssembly (Wasm Python)
+Pure-Python wheels (`.whl` files) are extracted directly into the sandbox virtual filesystem under `/in/site-packages` and imported instantly with **zero host daemon and zero network egress**:
+
+```go
+res, err := sb.Run(ctx, sandbox.Spec{
+    Lang:     "python",
+    Code:     "import mypackage; print(mypackage.compute())",
+    Packages: []string{"mypackage"},
+})
+```
+
+If a requested package is missing from the local cache and `Spec.Net == nil`, execution fails safely with `sandbox.ErrPackageNotFound`.
+
+### Managing Packages via CLI
+```bash
+# List all cached packages
+sandbox packages list python
+
+# Add a wheel package to local offline cache
+sandbox packages add --lang python mypackage-1.0.0-py3-none-any.whl
+
+# Run script with injected packages
+sandbox run --pkg "requests,pydantic" script.py
+```
+
+---
+
+## 9. Stateful REPL Sessions
 
 For conversational AI agents and notebooks, `sandbox.NewSession` provides stateful multi-turn evaluation without restarting the guest process:
 

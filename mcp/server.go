@@ -104,7 +104,18 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		}
 
 		// Handle requests (expects response with matching ID)
-		res := s.handleRequest(ctx, req)
+		notify := func(method string, params any) {
+			paramBytes, err := json.Marshal(params)
+			if err != nil {
+				return
+			}
+			_ = send(JSONRPCMessage{
+				JSONRPC: "2.0",
+				Method:  method,
+				Params:  paramBytes,
+			})
+		}
+		res := s.handleRequest(ctx, req, notify)
 		if err := send(res); err != nil {
 			return fmt.Errorf("sending response: %w", err)
 		}
@@ -124,7 +135,7 @@ func (s *Server) handleNotification(ctx context.Context, req JSONRPCMessage) {
 	}
 }
 
-func (s *Server) handleRequest(ctx context.Context, req JSONRPCMessage) JSONRPCMessage {
+func (s *Server) handleRequest(ctx context.Context, req JSONRPCMessage, notify func(method string, params any)) JSONRPCMessage {
 	resp := JSONRPCMessage{
 		JSONRPC: "2.0",
 		ID:      req.ID,
@@ -161,7 +172,7 @@ func (s *Server) handleRequest(ctx context.Context, req JSONRPCMessage) JSONRPCM
 			return resp
 		}
 
-		content, isError := s.callTool(ctx, callParams.Name, callParams.Arguments)
+		content, isError := s.callTool(ctx, callParams.Name, callParams.Arguments, notify)
 		resp.Result = map[string]any{
 			"content": []map[string]any{
 				{
@@ -249,7 +260,7 @@ func (s *Server) toolDefinitions() []map[string]any {
 	}
 }
 
-func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMessage) (string, bool) {
+func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMessage, notify func(method string, params any)) (string, bool) {
 	switch name {
 	case "execute_code":
 		var args struct {
@@ -274,6 +285,22 @@ func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMess
 		spec := sandbox.Spec{
 			Lang: args.Lang,
 			Code: args.Code,
+			OnStdout: func(chunk []byte) {
+				if notify != nil {
+					notify("notifications/message", map[string]any{
+						"level": "info",
+						"data":  string(chunk),
+					})
+				}
+			},
+			OnStderr: func(chunk []byte) {
+				if notify != nil {
+					notify("notifications/message", map[string]any{
+						"level": "warning",
+						"data":  string(chunk),
+					})
+				}
+			},
 		}
 		if args.Stdin != "" {
 			spec.Stdin = strings.NewReader(args.Stdin)

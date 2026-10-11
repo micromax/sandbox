@@ -106,3 +106,30 @@ func TestConcurrentWritesNeverExceedBudget(t *testing.T) {
 		t.Fatalf("total stored = %d, want %d", total, max)
 	}
 }
+
+func TestWriterStreamingTeeAndCallback(t *testing.T) {
+	g := NewGroup(20, errFull)
+	var streamedBytes []byte
+	var cbBytes []byte
+
+	var buf strings.Builder
+	w := g.NewWriterWithTee(&buf, func(chunk []byte) {
+		cbBytes = append(cbBytes, chunk...)
+	})
+
+	n, err := w.Write([]byte("streaming-data-part-1; "))
+	if err != nil && !errors.Is(err, errFull) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	streamedBytes = []byte(buf.String())
+	if string(streamedBytes) != string(w.Bytes()) {
+		t.Fatalf("streamed bytes %q != buffered bytes %q", string(streamedBytes), string(w.Bytes()))
+	}
+	if string(cbBytes) != string(w.Bytes()) {
+		t.Fatalf("callback bytes %q != buffered bytes %q", string(cbBytes), string(w.Bytes()))
+	}
+	if n != 20 {
+		t.Fatalf("expected 20 bytes written, got %d", n)
+	}
+}

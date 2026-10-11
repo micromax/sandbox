@@ -38,6 +38,8 @@ var (
 	ErrInvalidLimits = errors.New("sandbox: invalid limits")
 	// ErrInvalidPack means a pack definition is malformed.
 	ErrInvalidPack = errors.New("sandbox: invalid pack")
+	// ErrPackageNotFound means a requested package is not found in the offline cache.
+	ErrPackageNotFound = errors.New("sandbox: package not found in cache")
 )
 
 // isLimitError reports whether err is a resource-limit violation. For those

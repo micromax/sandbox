@@ -95,9 +95,23 @@ func TestMCPExecuteCode(t *testing.T) {
 		t.Fatalf("Serve failed: %v", err)
 	}
 
+	dec := json.NewDecoder(&out)
 	var callResp mcp.JSONRPCMessage
-	if err := json.Unmarshal(out.Bytes(), &callResp); err != nil {
-		t.Fatalf("unmarshaling call response: %v", err)
+	var notifications []mcp.JSONRPCMessage
+	for dec.More() {
+		var msg mcp.JSONRPCMessage
+		if err := dec.Decode(&msg); err != nil {
+			t.Fatalf("decoding message: %v", err)
+		}
+		if msg.ID != nil {
+			callResp = msg
+		} else {
+			notifications = append(notifications, msg)
+		}
+	}
+
+	if len(notifications) == 0 {
+		t.Fatalf("expected at least one live streaming notification")
 	}
 	if callResp.Error != nil {
 		t.Fatalf("call returned error: %+v", callResp.Error)
