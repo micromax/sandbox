@@ -12,6 +12,7 @@ import (
 	backendwasm "github.com/micromax/sandbox/backend/wasm"
 	"github.com/micromax/sandbox/mcp"
 	packjs "github.com/micromax/sandbox/packs/js"
+	packpython "github.com/micromax/sandbox/packs/python"
 	packts "github.com/micromax/sandbox/packs/ts"
 )
 
@@ -24,7 +25,7 @@ func setupTestServer(t *testing.T) *mcp.Server {
 
 	sb, err := sandbox.New(
 		sandbox.WithBackends(wBackend),
-		sandbox.WithPacks(packjs.Pack(), packts.Pack()),
+		sandbox.WithPacks(packjs.Pack(), packts.Pack(), packpython.Pack()),
 		sandbox.WithPolicy(sandbox.WasmOnly),
 	)
 	if err != nil {
@@ -178,5 +179,44 @@ func TestToolDefinitionsExport(t *testing.T) {
 	anthTools := mcp.AnthropicTools()
 	if len(anthTools) != 3 {
 		t.Errorf("expected 3 Anthropic tools, got %d", len(anthTools))
+	}
+}
+
+func TestMCPExecuteCodeWithFiles(t *testing.T) {
+	srv := setupTestServer(t)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	reqJSON := `{"jsonrpc":"2.0","id":100,"method":"tools/call","params":{"name":"execute_code","arguments":{"lang":"python","code":"import helper\nprint('RESULT=' + str(helper.multiply(6, 7)))","files":{"helper.py":"def multiply(a, b):\n    return a * b\n"}} }}` + "\n"
+	in := bytes.NewBufferString(reqJSON)
+	var out bytes.Buffer
+
+	if err := srv.Serve(ctx, in, &out); err != nil {
+		t.Fatalf("Serve failed: %v", err)
+	}
+
+	dec := json.NewDecoder(&out)
+	var callResp mcp.JSONRPCMessage
+	for dec.More() {
+		var msg mcp.JSONRPCMessage
+		if err := dec.Decode(&msg); err != nil {
+			t.Fatalf("decoding message: %v", err)
+		}
+		if msg.ID != nil {
+			callResp = msg
+		}
+	}
+
+	if callResp.Error != nil {
+		t.Fatalf("tool returned error: %+v", callResp.Error)
+	}
+	resMap := callResp.Result.(map[string]any)
+	contents := resMap["content"].([]any)
+	text := contents[0].(map[string]any)["text"].(string)
+
+	if !strings.Contains(text, "RESULT=42") {
+		t.Fatalf("expected 'RESULT=42' in execution response, got: %s", text)
 	}
 }

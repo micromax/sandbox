@@ -227,6 +227,15 @@ func (s *Server) toolDefinitions() []map[string]any {
 						"items":       map[string]any{"type": "string"},
 						"description": "Optional list of package dependencies to inject from local cache (e.g. ['six', 'requests'])",
 					},
+					"files": map[string]any{
+						"type":        "object",
+						"description": "Optional map of relative file paths to string contents for multi-file projects (e.g. {'utils/calc.py': 'def add(a, b): return a + b'})",
+						"additionalProperties": map[string]any{"type": "string"},
+					},
+					"project_dir": map[string]any{
+						"type":        "string",
+						"description": "Optional host directory path to automatically load project files from (scanned securely, ignoring git/node_modules/etc)",
+					},
 				},
 				"required": []string{"lang", "code"},
 			},
@@ -269,12 +278,14 @@ func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMess
 	switch name {
 	case "execute_code":
 		var args struct {
-			Lang           string   `json:"lang"`
-			Code           string   `json:"code"`
-			Packages       []string `json:"packages"`
-			Stdin          string   `json:"stdin"`
-			TimeoutSeconds float64  `json:"timeout_seconds"`
-			MemoryLimitMB  float64  `json:"memory_limit_mb"`
+			Lang           string            `json:"lang"`
+			Code           string            `json:"code"`
+			Packages       []string          `json:"packages"`
+			Files          map[string]string `json:"files"`
+			ProjectDir     string            `json:"project_dir"`
+			Stdin          string            `json:"stdin"`
+			TimeoutSeconds float64           `json:"timeout_seconds"`
+			MemoryLimitMB  float64           `json:"memory_limit_mb"`
 		}
 		if err := json.Unmarshal(rawArgs, &args); err != nil {
 			return fmt.Sprintf("Error: invalid arguments: %v", err), true
@@ -288,10 +299,28 @@ func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMess
 			timeout = time.Duration(args.TimeoutSeconds * float64(time.Second))
 		}
 
+		var fileMap map[string][]byte
+		if args.ProjectDir != "" {
+			var err error
+			fileMap, err = sandbox.LoadProjectFiles(args.ProjectDir)
+			if err != nil {
+				return fmt.Sprintf("Error loading project files from %s: %v", args.ProjectDir, err), true
+			}
+		}
+		if len(args.Files) > 0 {
+			if fileMap == nil {
+				fileMap = make(map[string][]byte)
+			}
+			for k, v := range args.Files {
+				fileMap[k] = []byte(v)
+			}
+		}
+
 		spec := sandbox.Spec{
 			Lang:     args.Lang,
 			Code:     args.Code,
 			Packages: args.Packages,
+			Files:    fileMap,
 			OnStdout: func(chunk []byte) {
 				if notify != nil {
 					notify("notifications/message", map[string]any{

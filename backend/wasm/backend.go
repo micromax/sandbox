@@ -458,7 +458,7 @@ func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcom
 	// Common language defaults
 	if req.Pack.Name == "python" || req.Pack.Name == "py" {
 		modConfig = modConfig.WithEnv("PYTHONHOME", "/")
-		modConfig = modConfig.WithEnv("PYTHONPATH", "/lib/python3.13:/in/site-packages")
+		modConfig = modConfig.WithEnv("PYTHONPATH", "/lib/python3.13:/in:/in/site-packages")
 	}
 
 	// 5. Instantiate and execute module

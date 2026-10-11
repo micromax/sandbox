@@ -165,6 +165,7 @@ func handleRun(args []string) {
 	lang := fs.String("lang", "", "Language name")
 	timeout := fs.Duration("timeout", 10*time.Second, "Wall-clock timeout")
 	mem := fs.String("mem", "", "Memory limit (e.g. 64M, 128M)")
+	dirFlag := fs.String("dir", "", "Project directory path to load local dependency files from")
 	pkgFlag := fs.String("pkg", "", "Comma-separated list of guest packages to inject")
 	netHosts := fs.String("net", "", "Comma-separated outbound host allow-list")
 	asJSON := fs.Bool("json", false, "Output results in JSON format")
@@ -240,8 +241,20 @@ func handleRun(args []string) {
 		}
 	}
 
+	if *dirFlag != "" {
+		projFiles, err := sandbox.LoadProjectFiles(*dirFlag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error loading project files from %s: %v\n", *dirFlag, err)
+			os.Exit(1)
+		}
+		spec.Files = projFiles
+	}
+
 	if targetLang == "wasm" || targetLang == "wasi" || targetLang == "wasip1" {
-		spec.Files = map[string][]byte{"main.wasm": data}
+		if spec.Files == nil {
+			spec.Files = make(map[string][]byte)
+		}
+		spec.Files["main.wasm"] = data
 	} else {
 		spec.Code = string(data)
 	}
