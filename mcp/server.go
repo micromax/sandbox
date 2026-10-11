@@ -222,6 +222,11 @@ func (s *Server) toolDefinitions() []map[string]any {
 						"type":        "number",
 						"description": "Optional memory ceiling in megabytes",
 					},
+					"packages": map[string]any{
+						"type":        "array",
+						"items":       map[string]any{"type": "string"},
+						"description": "Optional list of package dependencies to inject from local cache (e.g. ['six', 'requests'])",
+					},
 				},
 				"required": []string{"lang", "code"},
 			},
@@ -264,11 +269,12 @@ func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMess
 	switch name {
 	case "execute_code":
 		var args struct {
-			Lang           string  `json:"lang"`
-			Code           string  `json:"code"`
-			Stdin          string  `json:"stdin"`
-			TimeoutSeconds float64 `json:"timeout_seconds"`
-			MemoryLimitMB  float64 `json:"memory_limit_mb"`
+			Lang           string   `json:"lang"`
+			Code           string   `json:"code"`
+			Packages       []string `json:"packages"`
+			Stdin          string   `json:"stdin"`
+			TimeoutSeconds float64  `json:"timeout_seconds"`
+			MemoryLimitMB  float64  `json:"memory_limit_mb"`
 		}
 		if err := json.Unmarshal(rawArgs, &args); err != nil {
 			return fmt.Sprintf("Error: invalid arguments: %v", err), true
@@ -283,8 +289,9 @@ func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMess
 		}
 
 		spec := sandbox.Spec{
-			Lang: args.Lang,
-			Code: args.Code,
+			Lang:     args.Lang,
+			Code:     args.Code,
+			Packages: args.Packages,
 			OnStdout: func(chunk []byte) {
 				if notify != nil {
 					notify("notifications/message", map[string]any{
