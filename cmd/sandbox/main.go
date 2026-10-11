@@ -144,6 +144,7 @@ func printUsage() {
 Commands & Flags:
   run:
     --lang <name>       Language pack (inferred from file extension if omitted)
+    --dir <path>        Project directory to load local dependency files from
     --timeout <dur>     Execution deadline (e.g. 5s, 1m)
     --mem <bytes>       Memory limit in bytes (e.g. 64M, 128M)
     --pkg <packages>    Comma-separated list of packages to inject (e.g. requests,numpy)

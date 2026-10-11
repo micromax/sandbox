@@ -49,24 +49,42 @@ In **Cursor Settings > Features > MCP**, click **Add New MCP Server**:
 ## 3. Available Tools
 
 ### 1. `execute_code`
-Executes code in a strict, isolated environment.
+Executes code in a strict, isolated environment with support for offline packages and multi-file project dependencies.
 
 **Parameters**:
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `lang` | `string` | **Yes** | Language: `ts`, `js`, `python`, `lua`, `wasm`, `go`, `rust`, `java`, `bash` |
 | `code` | `string` | **Yes** | Source code to execute |
+| `packages` | `array<string>` | No | List of guest packages to inject from local offline cache (e.g. `["six", "sqlparse"]`) |
+| `files` | `map<string,string>`| No | Map of relative file paths to file contents for multi-file codebases |
+| `project_dir` | `string` | No | Host directory path to automatically load local project files from |
 | `stdin` | `string` | No | Optional standard input string |
 | `timeout_seconds` | `number` | No | Wall-clock execution deadline (default: 10s, max: 60s) |
 | `memory_limit_mb` | `number` | No | Memory limit in megabytes |
 
-**Example Tool Call**:
+**Example Tool Call (Single Script)**:
 ```json
 {
   "name": "execute_code",
   "arguments": {
     "lang": "ts",
     "code": "interface Stat { mean: number }; const s: Stat = { mean: 42 }; console.log('Mean:', s.mean);"
+  }
+}
+```
+
+**Example Tool Call (Multi-File with Packages)**:
+```json
+{
+  "name": "execute_code",
+  "arguments": {
+    "lang": "python",
+    "packages": ["sqlparse"],
+    "files": {
+      "utils/helper.py": "def format_sql(q):\n    import sqlparse\n    return sqlparse.format(q, reindent=True)\n"
+    },
+    "code": "from utils.helper import format_sql\nprint(format_sql('select 1, 2;'))"
   }
 }
 ```

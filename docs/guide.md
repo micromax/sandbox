@@ -268,6 +268,25 @@ fmt.Printf("Generated report: %s\n", string(reportJSON))
 
 Path traversal attacks (e.g. `../etc/passwd`, drive letters `C:`, NUL bytes) are rejected automatically at the API boundary.
 
+### Multi-File Projects & Package Dependencies
+
+To run complex codebases that depend on local submodules and third-party libraries:
+
+```go
+// 1. Scan and package local directory (auto-skips .git, .venv, node_modules)
+projFiles, err := sandbox.LoadProjectFiles("./my-project")
+
+// 2. Run inside sandbox with offline packages injected into /in/site-packages
+res, err := sb.Run(ctx, sandbox.Spec{
+    Lang:     "python",
+    Code:     "from services.analyzer import analyze; analyze()",
+    Files:    projFiles,
+    Packages: []string{"sqlparse"}, // resolved from local cache store
+})
+```
+
+For full details, see the dedicated [docs/projects-and-packages.md](file:///c:/Users/hp/sandbox/docs/projects-and-packages.md) guide.
+
 ---
 
 ## 7. Real-Time Output Streaming & Server-Sent Events (SSE)
@@ -433,6 +452,9 @@ The `sandbox` CLI is built on the public Go API, providing a full terminal compa
 # Run a script with limits
 sandbox run --lang python --timeout 5s --mem 64M script.py
 
+# Run a multi-file project with cached third-party packages
+sandbox run --dir ./my-project --pkg sqlparse ./my-project/main.py
+
 # Infer language automatically from extension
 sandbox run script.js
 sandbox run logic.lua
@@ -440,6 +462,10 @@ sandbox run binary.wasm
 
 # JSON output mode for scripting & pipelines
 sandbox run --json script.py
+
+# Manage offline cached packages
+sandbox packages list
+sandbox packages add python /path/to/wheel.whl
 
 # Start an interactive REPL
 sandbox repl --lang python
