@@ -341,10 +341,11 @@ func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMess
 		if args.Stdin != "" {
 			spec.Stdin = strings.NewReader(args.Stdin)
 		}
+		// Run enforces Limits.WallTime (default 10s) on its own, so the requested
+		// timeout must be passed down or anything above the default is ignored.
+		spec.Limits = &sandbox.Limits{WallTime: timeout}
 		if args.MemoryLimitMB > 0 {
-			spec.Limits = &sandbox.Limits{
-				Memory: uint64(args.MemoryLimitMB * 1024 * 1024),
-			}
+			spec.Limits.Memory = uint64(args.MemoryLimitMB * 1024 * 1024)
 		}
 
 		execCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -352,7 +353,12 @@ func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMess
 
 		res, err := s.sb.Run(execCtx, spec)
 		if err != nil {
-			return fmt.Sprintf("Execution Failed: %v\nExitCode: %d\nStderr:\n%s", err, res.ExitCode, string(res.Stderr)), true
+			// res is nil unless a resource limit was hit.
+			exitCode, stderr := -1, ""
+			if res != nil {
+				exitCode, stderr = res.ExitCode, string(res.Stderr)
+			}
+			return fmt.Sprintf("Execution Failed: %v\nExitCode: %d\nStderr:\n%s", err, exitCode, stderr), true
 		}
 
 		var sb strings.Builder
@@ -398,7 +404,12 @@ func (s *Server) callTool(ctx context.Context, name string, rawArgs json.RawMess
 
 		res, err := sess.Eval(ctx, args.Code)
 		if err != nil {
-			return fmt.Sprintf("Eval Error: %v\nStderr:\n%s", err, string(res.Stderr)), true
+			// res may be nil, e.g. when the session was killed.
+			stderr := ""
+			if res != nil {
+				stderr = string(res.Stderr)
+			}
+			return fmt.Sprintf("Eval Error: %v\nStderr:\n%s", err, stderr), true
 		}
 
 		var sb strings.Builder
