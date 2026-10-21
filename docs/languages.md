@@ -41,7 +41,7 @@
 ### Python (`python`)
 - **Runtime**: Official CPython (v3.13.9) compiled to WebAssembly with WASI SDK.
 - **Delivery**: Downloaded on first use into the user cache directory (`os.UserCacheDir()`), verified with SHA-256 (`f974d681...`), and cached content-addressed.
-- **Offline Capable**: Yes, after initial download or via pre-seeding (`sandbox packs install`).
+- **Offline Capable**: Yes, after the initial download. The cache location is shown by `sandbox doctor`.
 - **Standard Modules**: Core stdlib: `json`, `math`, `re`, `datetime`, `collections`, `itertools`, `hashlib`, `urllib.parse`, `string`, `random`, `csv`, `io`.
 - **Serving / HTTP**: Supported via M5 Handler Bridge (WSGI callable `app(environ, start_response)`).
 - **Restrictions**: C extensions requiring host compilation (like native `numpy` or `torch`) are not supported in WASI tier-1 (use Docker backend).

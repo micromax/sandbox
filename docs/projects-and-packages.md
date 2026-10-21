@@ -59,17 +59,17 @@ Host Machine (Isolated & Read-Only)
 ```bash
 sandbox packages list
 ```
-Output:
+Output (the language defaults to `python`; pass another as `sandbox packages list <lang>`):
 ```text
-LANGUAGE   PACKAGE      FILE
-python     six          six-1.17.0-py2.py3-none-any.whl
-python     sqlparse     sqlparse-0.6.0-py3-none-any.whl
+Cached packages for python:
+  • six                  (<size> bytes) -> <cache-dir>/python/six/six-1.17.0-py2.py3-none-any.whl
+  • sqlparse             (<size> bytes) -> <cache-dir>/python/sqlparse/sqlparse-0.6.0-py3-none-any.whl
 ```
 
 #### Add a Package to Cache
 To add a package wheel to the offline store:
 ```bash
-sandbox packages add python /path/to/sqlparse-0.6.0-py3-none-any.whl
+sandbox packages add --lang python /path/to/sqlparse-0.6.0-py3-none-any.whl
 ```
 
 > **Tier Compatibility Note**:
@@ -111,7 +111,7 @@ When running locally with tool access to the filesystem:
   "name": "execute_code",
   "arguments": {
     "lang": "python",
-    "project_dir": "c:/Users/hp/sandbox/examples/multi-file-project",
+    "project_dir": "/path/to/sandbox/examples/multi-file-project",
     "packages": ["sqlparse"],
     "code": "import main"
   }
@@ -170,7 +170,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer sb.Close()
+	defer wasmBackend.Close(context.Background())
 
 	// 3. Scan and collect project files safely
 	projectFiles, err := sandbox.LoadProjectFiles("./examples/multi-file-project")
@@ -201,7 +201,7 @@ func main() {
 
 ## 5. Walkthrough: Verified Sample Application
 
-The repository includes a complete working example under [`examples/multi-file-project/`](file:///c:/Users/hp/sandbox/examples/multi-file-project).
+The repository includes a complete working example under [`examples/multi-file-project/`](../examples/multi-file-project).
 
 ### Structure:
 ```
