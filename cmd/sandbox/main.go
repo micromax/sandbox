@@ -146,7 +146,7 @@ Commands & Flags:
     --lang <name>       Language pack (inferred from file extension if omitted)
     --dir <path>        Project directory to load local dependency files from
     --timeout <dur>     Execution deadline (e.g. 5s, 1m)
-    --mem <bytes>       Memory limit in bytes (e.g. 64M, 128M)
+    --mem <size>        Memory limit: bytes, or with a K/M/G suffix (e.g. 64M, 1G)
     --pkg <packages>    Comma-separated list of packages to inject (e.g. requests,numpy)
     --net <hosts>       Comma-separated allow-list for outbound network
     --json              Output execution results in JSON format
@@ -165,7 +165,7 @@ func handleRun(args []string) {
 	fs := flag.NewFlagSet("run", flag.ExitOnError)
 	lang := fs.String("lang", "", "Language name")
 	timeout := fs.Duration("timeout", 10*time.Second, "Wall-clock timeout")
-	mem := fs.String("mem", "", "Memory limit (e.g. 64M, 128M)")
+	mem := fs.String("mem", "", "Memory limit: bytes, or with a K/M/G suffix (e.g. 64M, 1G)")
 	dirFlag := fs.String("dir", "", "Project directory path to load local dependency files from")
 	pkgFlag := fs.String("pkg", "", "Comma-separated list of guest packages to inject")
 	netHosts := fs.String("net", "", "Comma-separated outbound host allow-list")
@@ -208,11 +208,12 @@ func handleRun(args []string) {
 			WallTime: *timeout,
 		}
 		if *mem != "" {
-			var bytes uint64
-			if strings.HasSuffix(*mem, "M") || strings.HasSuffix(*mem, "MiB") {
-				fmt.Sscanf(*mem, "%d", &bytes)
-				limits.Memory = bytes * 1024 * 1024
+			memBytes, err := parseSize(*mem)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: invalid --mem: %v\n", err)
+				os.Exit(1)
 			}
+			limits.Memory = memBytes
 		}
 	}
 
