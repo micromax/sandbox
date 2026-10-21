@@ -22,16 +22,6 @@ import (
 	backendwasm "github.com/micromax/sandbox/backend/wasm"
 	"github.com/micromax/sandbox/mcp"
 	"github.com/micromax/sandbox/packages"
-	packbash "github.com/micromax/sandbox/packs/bash"
-	packgo "github.com/micromax/sandbox/packs/go"
-	packjava "github.com/micromax/sandbox/packs/java"
-	packjs "github.com/micromax/sandbox/packs/js"
-	packlua "github.com/micromax/sandbox/packs/lua"
-	packnode "github.com/micromax/sandbox/packs/node"
-	packpython "github.com/micromax/sandbox/packs/python"
-	packrust "github.com/micromax/sandbox/packs/rust"
-	packts "github.com/micromax/sandbox/packs/ts"
-	packwasm "github.com/micromax/sandbox/packs/wasm"
 )
 
 var version = "0.3.0"
@@ -49,18 +39,7 @@ func initSandbox() (*sandbox.Sandbox, *backendwasm.Backend, *backenddocker.Backe
 
 	sb, err := sandbox.New(
 		sandbox.WithBackends(wBackend, dBackend),
-		sandbox.WithPacks(
-			packjs.Pack(),
-			packts.Pack(),
-			packpython.Pack(),
-			packlua.Pack(),
-			packwasm.Pack(),
-			packnode.Pack(),
-			packjava.Pack(),
-			packgo.Pack(),
-			packrust.Pack(),
-			packbash.Pack(),
-		),
+		sandbox.WithPacks(allPacks()...),
 		sandbox.WithPolicy(sandbox.PreferWasm),
 	)
 	if err != nil {
@@ -453,8 +432,8 @@ func handleDoctor(args []string) {
 		_, err := backenddocker.NewClient(ctx, "")
 		if err != nil {
 			fmt.Printf("  ⚠️  Docker daemon not detected (%v)\n", err)
-			fmt.Println("     -> Docker-only languages (Java, Rust, Go, Node, Bash) will be unavailable.")
-			fmt.Println("     -> Pure-Wasm languages (JavaScript, Python, Lua, Raw Wasm) remain 100% functional.")
+			fmt.Printf("     -> Docker-only languages (%s) will be unavailable.\n", strings.Join(packNames(isDockerOnly), ", "))
+			fmt.Printf("     -> Wasm languages (%s) remain 100%% functional.\n", strings.Join(packNames(hasWasm), ", "))
 		} else {
 			fmt.Println("  ✅ Docker daemon is connected and healthy.")
 		}
@@ -471,37 +450,22 @@ func handleDoctor(args []string) {
 
 	// 4. Supported Languages Status
 	fmt.Println("\n[4] Language Support Matrix:")
-	langs := []struct {
-		name    string
-		tier    string
-		backend string
-	}{
-		{"JavaScript", "Tier 1 (Zero Docker)", "Wasm (QuickJS-NG embedded)"},
-		{"TypeScript", "Tier 1 (Zero Docker)", "Wasm (QuickJS-NG + AST Transpiler)"},
-		{"Python", "Tier 1 (Zero Docker)", "Wasm (CPython 3.13 WASI)"},
-		{"Lua", "Tier 1 (Zero Docker)", "Wasm (Lua 5.4 embedded)"},
-		{"Raw WASI", "Tier 1 (Zero Docker)", "Wasm (Go, Rust, Zig, C binaries)"},
-		{"Node.js", "Tier 2 (Universal)", "Docker (node:slim)"},
-		{"Java", "Tier 2 (Universal)", "Docker (eclipse-temurin:21)"},
-		{"Go (source)", "Tier 2 (Universal)", "Docker (golang:alpine)"},
-		{"Rust (source)", "Tier 2 (Universal)", "Docker (rust:alpine)"},
-		{"Bash", "Tier 2 (Universal)", "Docker (alpine:latest)"},
-	}
-	for _, l := range langs {
-		fmt.Printf("  • %-14s : %-22s [%s]\n", l.name, l.tier, l.backend)
+	for _, p := range allPacks() {
+		tier, runtime := describePack(p)
+		fmt.Printf("  • %-8s : %-22s [%s]\n", p.Name, tier, runtime)
 	}
 	fmt.Println("\nDiagnosis: System is ready.")
 }
 
 func handlePacks(args []string) {
-	sb, _, _, err := initSandbox()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
-	}
 	fmt.Println("Registered Language Packs:")
-	for _, p := range sb.Languages() {
-		fmt.Printf("  • %s\n", p)
+	for _, p := range allPacks() {
+		tier, _ := describePack(p)
+		line := p.Name
+		if len(p.Aliases) > 0 {
+			line += " (" + strings.Join(p.Aliases, ", ") + ")"
+		}
+		fmt.Printf("  • %-34s %s\n", line, tier)
 	}
 }
 
@@ -537,22 +501,32 @@ func handlePackages(args []string) {
 
 	switch args[0] {
 	case "list":
-		lang := "python"
-		if len(args) > 1 {
-			lang = args[1]
+		langs := packLangs()
+		explicit := len(args) > 1
+		if explicit {
+			langs = []string{args[1]}
 		}
-		pkgs, err := store.List(lang)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error listing packages: %v\n", err)
-			os.Exit(1)
+		found := false
+		for _, lang := range langs {
+			pkgs, err := store.List(lang)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error listing packages: %v\n", err)
+				os.Exit(1)
+			}
+			if len(pkgs) == 0 {
+				if explicit {
+					fmt.Printf("No cached packages found for language %q (cache dir: %s)\n", lang, store.Dir())
+				}
+				continue
+			}
+			found = true
+			fmt.Printf("Cached packages for %s:\n", lang)
+			for _, p := range pkgs {
+				fmt.Printf("  • %-20s (%d bytes) -> %s\n", p.Name, p.Size, p.Path)
+			}
 		}
-		if len(pkgs) == 0 {
-			fmt.Printf("No cached packages found for language %q (cache dir: %s)\n", lang, store.Dir())
-			return
-		}
-		fmt.Printf("Cached packages for %s:\n", lang)
-		for _, p := range pkgs {
-			fmt.Printf("  • %-20s (%d bytes) -> %s\n", p.Name, p.Size, p.Path)
+		if !found && !explicit {
+			fmt.Printf("No cached packages found (cache dir: %s)\n", store.Dir())
 		}
 	case "add":
 		fs := flag.NewFlagSet("packages add", flag.ExitOnError)
