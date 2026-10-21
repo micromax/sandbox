@@ -356,4 +356,3 @@ func TestProxyHTTP_Upgrade(t *testing.T) {
 		t.Errorf("Expected echo payload %q, got %q", payload, string(buf[:n]))
 	}
 }
-

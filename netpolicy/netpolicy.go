@@ -61,8 +61,8 @@ func (hm *HostMatcher) Matches(host string) bool {
 
 // IPClassifier classifies IP addresses into categories.
 type IPClassifier struct {
-	privateBlocks []*net.IPNet
-	loopbackBlock *net.IPNet
+	privateBlocks  []*net.IPNet
+	loopbackBlock  *net.IPNet
 	linkLocalBlock *net.IPNet
 	metadataBlock  *net.IPNet
 }
@@ -77,8 +77,8 @@ func initIPClassifier() *IPClassifier {
 	_, linkLocal, _ := net.ParseCIDR("169.254.0.0/16")
 	_, metadata, _ := net.ParseCIDR("169.254.169.254/32")
 	return &IPClassifier{
-		privateBlocks: privateBlocks,
-		loopbackBlock: loopback,
+		privateBlocks:  privateBlocks,
+		loopbackBlock:  loopback,
 		linkLocalBlock: linkLocal,
 		metadataBlock:  metadata,
 	}
@@ -171,7 +171,7 @@ func (hm *HostMatcher) ResolveThenPin(host string, ports []int, allowPrivate boo
 // RedirectValidator validates redirects to ensure they don't target private/internal IPs.
 type RedirectValidator struct {
 	allowPrivate bool
-	matcher     *HostMatcher
+	matcher      *HostMatcher
 }
 
 func NewRedirectValidator(allowPrivate bool, patterns []string) *RedirectValidator {
@@ -220,13 +220,13 @@ func (rv *RedirectValidator) ValidateRedirect(target string) error {
 
 // RequestLimiter tracks request count and total bytes.
 type RequestLimiter struct {
-	mu            sync.Mutex
-	requests      int
-	maxRequests   int
-	bytes         uint64
-	maxBytes      uint64
-	timeout       time.Duration
-	lastReset     time.Time
+	mu          sync.Mutex
+	requests    int
+	maxRequests int
+	bytes       uint64
+	maxBytes    uint64
+	timeout     time.Duration
+	lastReset   time.Time
 }
 
 func NewRequestLimiter(maxRequests int, maxBytes uint64, timeout time.Duration) *RequestLimiter {
@@ -265,20 +265,20 @@ func (rl *RequestLimiter) RecordBytes(n int) error {
 
 // HTTPClient is a custom HTTP client that enforces netpolicy.
 type HTTPClient struct {
-	matcher       *HostMatcher
-	ports         []int
-	allowPrivate  bool
-	limiter       *RequestLimiter
+	matcher           *HostMatcher
+	ports             []int
+	allowPrivate      bool
+	limiter           *RequestLimiter
 	redirectValidator *RedirectValidator
-	httpClient   *http.Client
+	httpClient        *http.Client
 }
 
 func NewHTTPClient(matcher *HostMatcher, ports []int, allowPrivate bool, limiter *RequestLimiter, redirectValidator *RedirectValidator) *HTTPClient {
 	return &HTTPClient{
-		matcher: matcher,
-		ports: ports,
-		allowPrivate: allowPrivate,
-		limiter: limiter,
+		matcher:           matcher,
+		ports:             ports,
+		allowPrivate:      allowPrivate,
+		limiter:           limiter,
 		redirectValidator: redirectValidator,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,

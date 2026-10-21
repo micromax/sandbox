@@ -479,5 +479,3 @@ print(greet.say_hi("Antigravity"))
 		t.Errorf("expected ErrPackageNotFound, got: %v", missingErr)
 	}
 }
-
-

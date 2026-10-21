@@ -228,8 +228,8 @@ func (s *Server) toolDefinitions() []map[string]any {
 						"description": "Optional list of package dependencies to inject from local cache (e.g. ['six', 'requests'])",
 					},
 					"files": map[string]any{
-						"type":        "object",
-						"description": "Optional map of relative file paths to string contents for multi-file projects (e.g. {'utils/calc.py': 'def add(a, b): return a + b'})",
+						"type":                 "object",
+						"description":          "Optional map of relative file paths to string contents for multi-file projects (e.g. {'utils/calc.py': 'def add(a, b): return a + b'})",
 						"additionalProperties": map[string]any{"type": "string"},
 					},
 					"project_dir": map[string]any{
