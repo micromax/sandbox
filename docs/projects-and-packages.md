@@ -44,6 +44,7 @@ Host Machine (Isolated & Read-Only)
 2. **Automated Ignore Filter**: Sensitive directories (`.git`, `.env`, `.venv`, `node_modules`, `__pycache__`, `.vscode`) are automatically ignored during project loading.
 3. **No Unchecked Host Traversal**: The guest cannot traverse out of `/in`. Any attempt to access `/etc/passwd`, host drives, or parent folders (`../../`) is blocked by the virtual filesystem.
 4. **Air-Gapped Package Injection**: Third-party packages are sourced from a local offline package cache—no outbound network connection or `pip install` required at runtime.
+5. **Hostile-Archive Extraction**: Wheels are unpacked with hard caps (10,000 entries, 32 MiB per file, 128 MiB total by default, enforced on bytes actually written). Entries that escape the target directory fail the run, symlinks are ignored, and setuid/setgid bits are stripped. Exceeding a cap returns `packages.ErrArchiveTooLarge`.
 
 ---
 

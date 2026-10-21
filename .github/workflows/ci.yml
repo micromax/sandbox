@@ -50,3 +50,5 @@ jobs:
           go-version-file: go.mod
       - name: Fuzz path normaliser
         run: go test ./vfs -run '^$' -fuzz FuzzClean -fuzztime 60s
+      - name: Fuzz wheel extraction
+        run: go test ./packages -run '^$' -fuzz FuzzExtractWheel -fuzztime 60s
