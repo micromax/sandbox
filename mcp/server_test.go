@@ -220,3 +220,86 @@ func TestMCPExecuteCodeWithFiles(t *testing.T) {
 		t.Fatalf("expected 'RESULT=42' in execution response, got: %s", text)
 	}
 }
+
+// callExecute sends one tools/call request and returns the response text and isError flag.
+func callExecute(t *testing.T, srv *mcp.Server, tool, args string) (string, bool) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	req := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + tool + `","arguments":` + args + `}}` + "\n"
+	var out bytes.Buffer
+	if err := srv.Serve(ctx, bytes.NewBufferString(req), &out); err != nil {
+		t.Fatalf("Serve failed: %v", err)
+	}
+
+	dec := json.NewDecoder(&out)
+	for dec.More() {
+		var msg mcp.JSONRPCMessage
+		if err := dec.Decode(&msg); err != nil {
+			t.Fatalf("decoding message: %v", err)
+		}
+		if msg.ID == nil {
+			continue // streaming notification
+		}
+		if msg.Error != nil {
+			t.Fatalf("tool returned JSON-RPC error: %+v", msg.Error)
+		}
+		resMap := msg.Result.(map[string]any)
+		text := resMap["content"].([]any)[0].(map[string]any)["text"].(string)
+		return text, resMap["isError"].(bool)
+	}
+	t.Fatal("no response received")
+	return "", false
+}
+
+// Run returns a nil Result for non-limit failures; the handler must not dereference it.
+func TestMCPExecuteCodeRunFailureDoesNotPanic(t *testing.T) {
+	srv := setupTestServer(t)
+	defer srv.Close()
+
+	cases := map[string]string{
+		"unknown language":          `{"lang":"nope","code":"x"}`,
+		"packages unsupported (js)": `{"lang":"js","code":"1","packages":["whatever"]}`,
+	}
+	for name, args := range cases {
+		t.Run(name, func(t *testing.T) {
+			text, isError := callExecute(t, srv, "execute_code", args)
+			if !isError {
+				t.Fatalf("expected isError=true, got text: %s", text)
+			}
+			if !strings.Contains(text, "Execution Failed") {
+				t.Fatalf("expected 'Execution Failed' in output, got: %s", text)
+			}
+		})
+	}
+}
+
+// timeout_seconds must reach Limits.WallTime; otherwise the sandbox default silently wins.
+func TestMCPExecuteCodeHonorsTimeoutSeconds(t *testing.T) {
+	wBackend, err := backendwasm.New()
+	if err != nil {
+		t.Fatalf("backendwasm.New: %v", err)
+	}
+	sb, err := sandbox.New(
+		sandbox.WithBackends(wBackend),
+		sandbox.WithPacks(packjs.Pack()),
+		sandbox.WithPolicy(sandbox.WasmOnly),
+		sandbox.WithDefaultLimits(sandbox.Limits{WallTime: 500 * time.Millisecond}),
+	)
+	if err != nil {
+		t.Fatalf("sandbox.New: %v", err)
+	}
+	srv := mcp.NewServer(sb)
+	defer srv.Close()
+
+	// Guest clocks and sleeps are virtual under wazero, so burn real CPU instead:
+	// ~1.5-2s on a laptop, well over the 500ms default and far under 30s even with -race.
+	const burnCPU = `var s = 0; for (var i = 0; i < 5000000; i++) { s += i; } console.log('FINISHED');`
+	args, _ := json.Marshal(map[string]any{"lang": "js", "code": burnCPU, "timeout_seconds": 30})
+
+	text, isError := callExecute(t, srv, "execute_code", string(args))
+	if isError || !strings.Contains(text, "FINISHED") {
+		t.Fatalf("program should finish within the requested 30s timeout (sandbox default is 500ms); isError=%v text: %s", isError, text)
+	}
+}
