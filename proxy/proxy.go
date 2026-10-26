@@ -91,9 +91,9 @@ func New(cfg Config) (*Proxy, error) {
 	}
 
 	p := &Proxy{
-		cfg:      cfg,
-		closed:   make(chan struct{}),
-		conns:    make(map[net.Conn]struct{}),
+		cfg:    cfg,
+		closed: make(chan struct{}),
+		conns:  make(map[net.Conn]struct{}),
 	}
 
 	// Wrap listener with connection limiter and tracker

@@ -73,7 +73,7 @@ console.log(identity(123));`,
 			omits: []string{"<T>", ": T"},
 		},
 		{
-			name: "type cast as",
+			name:  "type cast as",
 			input: `const val = (raw as string).trim();`,
 			contains: []string{
 				"(raw).trim()",

@@ -180,9 +180,9 @@ func (b *Backend) Run(ctx context.Context, req *sandbox.Request) (sandbox.Outcom
 		SecurityOpt:    []string{"no-new-privileges:true"},
 		Memory:         memLimit,
 		MemorySwap:     memLimit, // disable swap beyond memory limit
-		NanoCPUs:  int64(1_000_000_000),
-		PidsLimit: int64(req.Limits.MaxProcs),
-		Runtime:   b.runtime,
+		NanoCPUs:       int64(1_000_000_000),
+		PidsLimit:      int64(req.Limits.MaxProcs),
+		Runtime:        b.runtime,
 	}
 
 	// 3. Create container
@@ -545,4 +545,3 @@ func (s *dockerGuestService) Stop() error {
 	})
 	return nil
 }
-

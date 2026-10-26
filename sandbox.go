@@ -338,4 +338,3 @@ func (s *Sandbox) NewSession(ctx context.Context, lang string, opts ...SessionOp
 	}
 	return sessionBackend.NewSession(ctx, req)
 }
-

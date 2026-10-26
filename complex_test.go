@@ -488,4 +488,3 @@ for (var i = 0; i < 2000; i++) {
 		t.Logf("Infinite loop terminated cleanly in %v", elapsed)
 	})
 }
-

@@ -479,4 +479,3 @@ func TestStreamingStdoutAndStderr(t *testing.T) {
 		t.Errorf("combined callback chunks %q != res.Stdout %q", combinedCb, string(res.Stdout))
 	}
 }
-
