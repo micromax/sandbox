@@ -5,6 +5,7 @@ package packages
 import (
 	"archive/zip"
 	"bytes"
+	"compress/flate"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,8 @@ var (
 	ErrNotFound = errors.New("packages: package not found in cache")
 	// ErrInvalidArchive is returned when a package archive (wheel or tarball) is corrupted or malformed.
 	ErrInvalidArchive = errors.New("packages: invalid package archive")
+	// ErrArchiveTooLarge is returned when extracting an archive would exceed [ExtractLimits].
+	ErrArchiveTooLarge = errors.New("packages: archive exceeds extraction limits")
 )
 
 // PackageInfo describes a cached package.
@@ -151,51 +154,143 @@ func (s *Store) List(lang string) ([]PackageInfo, error) {
 	return out, nil
 }
 
-// ExtractWheel extracts a pure-Python .whl (ZIP archive) into targetDir.
-// It skips .dist-info and dangerous path traversal entries.
+// ExtractLimits bounds what a single archive may write to disk. Declared sizes
+// in a zip header are attacker-controlled, so limits are enforced on the bytes
+// actually written.
+type ExtractLimits struct {
+	// MaxEntries caps the number of archive entries (files and directories).
+	MaxEntries int
+	// MaxFileBytes caps the uncompressed size of any single file.
+	MaxFileBytes int64
+	// MaxTotalBytes caps the combined uncompressed size of all files.
+	MaxTotalBytes int64
+}
+
+// DefaultExtractLimits are generous for real pure-Python wheels (typically well
+// under a few MiB) while stopping a decompression bomb from filling the host disk.
+var DefaultExtractLimits = ExtractLimits{
+	MaxEntries:    10_000,
+	MaxFileBytes:  32 << 20,
+	MaxTotalBytes: 128 << 20,
+}
+
+// ExtractWheel extracts a pure-Python .whl (ZIP archive) into targetDir using
+// [DefaultExtractLimits]. See [ExtractWheelWithLimits].
 func ExtractWheel(targetDir string, wheelData []byte) error {
+	return ExtractWheelWithLimits(targetDir, wheelData, DefaultExtractLimits)
+}
+
+// ExtractWheelWithLimits extracts a .whl into targetDir, treating the archive as
+// hostile:
+//   - entries whose names are absolute or escape targetDir fail the whole
+//     extraction with [ErrInvalidArchive] instead of being skipped silently;
+//   - exceeding lim returns [ErrArchiveTooLarge]; at most MaxFileBytes of any
+//     one file and MaxTotalBytes overall are ever written;
+//   - symlinks and other non-regular entries are ignored;
+//   - file permissions are reduced to plain rwx bits (no setuid/setgid/sticky)
+//     and are never below 0644.
+//
+// The .dist-info directory is extracted like any other entry. On error,
+// targetDir may hold a partial extraction and should be discarded by the caller.
+func ExtractWheelWithLimits(targetDir string, wheelData []byte, lim ExtractLimits) error {
 	zr, err := zip.NewReader(bytes.NewReader(wheelData), int64(len(wheelData)))
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidArchive, err)
 	}
 
+	if lim.MaxEntries > 0 && len(zr.File) > lim.MaxEntries {
+		return fmt.Errorf("%w: %d entries exceed the limit of %d", ErrArchiveTooLarge, len(zr.File), lim.MaxEntries)
+	}
+
+	var total int64
 	for _, f := range zr.File {
-		cleanName := filepath.Clean(f.Name)
-		if strings.HasPrefix(cleanName, "..") || filepath.IsAbs(cleanName) {
-			continue // Prevent traversal
+		rel := filepath.FromSlash(f.Name)
+		if !filepath.IsLocal(rel) {
+			return fmt.Errorf("%w: unsafe entry name %q", ErrInvalidArchive, f.Name)
 		}
+		targetPath := filepath.Join(targetDir, rel)
 
-		targetPath := filepath.Join(targetDir, cleanName)
-
+		mode := f.Mode()
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(targetPath, 0o755); err != nil {
 				return err
 			}
 			continue
 		}
+		if !mode.IsRegular() {
+			continue // symlinks, devices, etc. have no place in a pure-Python wheel
+		}
+
+		// Cheap early rejection using the declared size; the copy below
+		// enforces the real limit because the declared size may be forged.
+		if lim.MaxFileBytes > 0 && f.UncompressedSize64 > uint64(lim.MaxFileBytes) {
+			return fmt.Errorf("%w: %q declares %d bytes, limit is %d", ErrArchiveTooLarge, f.Name, f.UncompressedSize64, lim.MaxFileBytes)
+		}
 
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return err
 		}
 
-		rc, err := f.Open()
+		n, err := extractFile(f, targetPath, mode.Perm()|0o644, remainingBudget(lim, total))
+		total += n
 		if err != nil {
-			return err
-		}
-
-		outF, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
-		if err != nil {
-			_ = rc.Close()
-			return err
-		}
-
-		_, cpErr := io.Copy(outF, rc)
-		_ = rc.Close()
-		_ = outF.Close()
-		if cpErr != nil {
-			return cpErr
+			return fmt.Errorf("extracting %q: %w", f.Name, err)
 		}
 	}
-
 	return nil
+}
+
+// remainingBudget returns how many more bytes one file may write, or -1 for no limit.
+func remainingBudget(lim ExtractLimits, written int64) int64 {
+	budget := int64(-1)
+	if lim.MaxFileBytes > 0 {
+		budget = lim.MaxFileBytes
+	}
+	if lim.MaxTotalBytes > 0 {
+		if left := lim.MaxTotalBytes - written; budget < 0 || left < budget {
+			budget = left
+		}
+	}
+	return budget
+}
+
+// extractFile copies one entry to path, writing at most budget bytes (-1 = no
+// limit) and failing with ErrArchiveTooLarge if the entry holds more. It returns
+// the number of bytes written.
+func extractFile(f *zip.File, path string, perm os.FileMode, budget int64) (int64, error) {
+	rc, err := f.Open()
+	if err != nil {
+		return 0, err
+	}
+	defer rc.Close()
+
+	out, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perm)
+	if err != nil {
+		return 0, err
+	}
+
+	var src io.Reader = rc
+	if budget >= 0 {
+		src = io.LimitReader(rc, budget+1) // one extra byte detects overflow
+	}
+	n, cpErr := io.Copy(out, src)
+	closeErr := out.Close()
+
+	if budget >= 0 && n > budget {
+		// Drop the overflow byte so the file on disk never exceeds the budget.
+		_ = os.Truncate(path, budget)
+		return budget, fmt.Errorf("%w: entry exceeds the remaining size budget", ErrArchiveTooLarge)
+	}
+	if cpErr != nil {
+		var corrupt flate.CorruptInputError
+		if errors.Is(cpErr, zip.ErrFormat) || errors.Is(cpErr, zip.ErrChecksum) ||
+			errors.Is(cpErr, zip.ErrAlgorithm) || errors.Is(cpErr, io.ErrUnexpectedEOF) ||
+			errors.As(cpErr, &corrupt) {
+			// Includes entries that inflate past the size they declared, which
+			// archive/zip detects on its own.
+			return n, fmt.Errorf("%w: %v", ErrInvalidArchive, cpErr)
+		}
+		return n, cpErr
+	}
+	return n, closeErr
 }
