@@ -285,7 +285,7 @@ res, err := sb.Run(ctx, sandbox.Spec{
 })
 ```
 
-For full details, see the dedicated [docs/projects-and-packages.md](file:///c:/Users/hp/sandbox/docs/projects-and-packages.md) guide.
+For full details, see the dedicated [docs/projects-and-packages.md](projects-and-packages.md) guide.
 
 ---
 
@@ -465,7 +465,7 @@ sandbox run --json script.py
 
 # Manage offline cached packages
 sandbox packages list
-sandbox packages add python /path/to/wheel.whl
+sandbox packages add --lang python /path/to/wheel.whl
 
 # Start an interactive REPL
 sandbox repl --lang python
@@ -509,7 +509,7 @@ Claude Desktop will automatically acquire 3 secure tools:
 * `eval_session`: Persistent multi-turn REPL execution that preserves variables across conversation turns.
 * `list_languages`: Environment inspection.
 
-For complete setup guides and OpenAI/Anthropic Go SDK examples, see [docs/mcp.md](file:///c:/Users/hp/sandbox/docs/mcp.md).
+For complete setup guides and OpenAI/Anthropic Go SDK examples, see [docs/mcp.md](mcp.md).
 
 ---
 
